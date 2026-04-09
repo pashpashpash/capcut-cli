@@ -1,19 +1,19 @@
 # Sound library
 
-This directory holds committed TikTok sound metadata and selected audio samples for the first deliverable.
+This directory holds committed sound metadata plus imported TikTok trend assets.
 
 ## Goals
 
-- keep a growing library of popular sounds in-repo
-- store normalized metadata for every sound
-- keep at least a small committed sample set so the pipeline is inspectable
-- make it easy for an agent to add more sounds over time
+- keep a growing in-repo sound library
+- store normalized metadata for every sound import
+- preserve both the representative source video and the extracted audio
+- keep the pipeline inspectable through committed schemas and step artifacts
 
 ## Structure
 
 - `manifest.json` — top-level library index
-- `seed/` — manually curated or initially imported sounds
-- `samples/` — committed audio files that can be previewed and shared for feedback
+- `imported/` — per-sound directories created by the TikTok Apify importer
+- `samples/` — committed seed assets for repo scaffolding
 
 ## Metadata expectations
 
@@ -21,12 +21,15 @@ Each sound entry should track:
 
 - stable local id
 - source platform
-- source URL or source identifier
+- trend/source URL
+- representative source video URL
 - title or inferred label
 - creator/uploader when known
 - duration
-- local committed path if present
-- acquisition method
+- local video path
+- local audio path
+- local metadata path
+- per-step metadata paths when present
+- acquisition method / provenance
 - rights/provenance note
-- tags
-- status
+- representative engagement metrics when present

@@ -1,0 +1,10 @@
+{
+  "id": "sound_seed_001",
+  "title": "Seed preview loop",
+  "author": "capcut-cli placeholder",
+  "platform": "synthetic",
+  "source_url": "local://seed-preview-loop",
+  "duration_seconds": 2,
+  "rights_note": "Synthetic placeholder preview tone for repo scaffolding only. Not a TikTok-derived asset.",
+  "provenance": "Created locally to test repository layout before real import pipeline existed."
+}

@@ -1,9 +1,19 @@
-use anyhow::Result;
+use std::path::PathBuf;
+
+use anyhow::{Result, bail};
 use clap::{Args, Parser, Subcommand, ValueEnum};
 
-use crate::models::{
-    AppReport, DiscoverSource, DiscoveryReport, LibraryReport, MediaReport, PipelineStep,
-    PipelineStepKind,
+use crate::{
+    apify,
+    config::{self, APIFY_CONFIG_ENV},
+    models::{
+        AppReport, AuthReport, DiscoverSource, DiscoveryReport, LibraryReport, MediaReport,
+        PipelineStep, PipelineStepKind, SoundImportReport,
+    },
+    tiktok::{
+        self, DEFAULT_IMPORT_OUTPUT_DIR, ImportTrendingSoundsOptions, LIBRARY_MANIFEST_PATH,
+        MUSIC_POSTS_ACTOR_ID, TRENDS_ACTOR_ID, VIDEO_DOWNLOADER_ACTOR_ID,
+    },
 };
 
 #[derive(Debug, Parser)]
@@ -20,6 +30,7 @@ pub struct Cli {
 impl Cli {
     pub fn run(self) -> Result<()> {
         let report = match self.command {
+            Command::Auth(args) => args.run(),
             Command::Discover(args) => args.run(),
             Command::Library(args) => args.run(),
             Command::Compose(args) => args.run(),
@@ -32,9 +43,67 @@ impl Cli {
 
 #[derive(Debug, Subcommand)]
 enum Command {
+    Auth(AuthArgs),
     Discover(DiscoverArgs),
     Library(LibraryArgs),
     Compose(ComposeArgs),
+}
+
+#[derive(Debug, Args)]
+struct AuthArgs {
+    #[arg(long)]
+    apify: Option<String>,
+
+    #[arg(long, default_value_t = false)]
+    from_env: bool,
+}
+
+impl AuthArgs {
+    fn run(self) -> Result<AppReport> {
+        if self.apify.is_some() && self.from_env {
+            bail!("use either `--apify <token>` or `--from-env`, not both")
+        }
+
+        if let Some(token) = self.apify {
+            let path = config::write_apify_token(token)?;
+            return Ok(AppReport::Auth(AuthReport {
+                provider: "apify".to_string(),
+                action: "write_config".to_string(),
+                scope: "local_user_config".to_string(),
+                config_path: path.display().to_string(),
+                env_var: APIFY_CONFIG_ENV.to_string(),
+                token_present: true,
+                configured_via: Some("config_file".to_string()),
+            }));
+        }
+
+        if self.from_env {
+            let token = config::read_env_apify_token()?;
+            let path = config::write_apify_token(token)?;
+            return Ok(AppReport::Auth(AuthReport {
+                provider: "apify".to_string(),
+                action: "write_config".to_string(),
+                scope: "local_user_config".to_string(),
+                config_path: path.display().to_string(),
+                env_var: APIFY_CONFIG_ENV.to_string(),
+                token_present: true,
+                configured_via: Some("env".to_string()),
+            }));
+        }
+
+        let status = config::apify_auth_status()?;
+        Ok(AppReport::Auth(AuthReport {
+            provider: "apify".to_string(),
+            action: "status".to_string(),
+            scope: "env_or_local_user_config".to_string(),
+            config_path: status.config_path.display().to_string(),
+            env_var: status.env_var.to_string(),
+            token_present: status.token_present,
+            configured_via: status
+                .configured_via
+                .map(|source| source.as_str().to_string()),
+        }))
+    }
 }
 
 #[derive(Debug, Args)]
@@ -47,44 +116,75 @@ struct DiscoverArgs {
 
     #[arg(long, default_value_t = 10)]
     limit: u32,
+
+    #[arg(long, default_value = "United States")]
+    country: String,
+
+    #[arg(long, default_value = "7")]
+    period: String,
 }
 
 impl DiscoverArgs {
     fn run(self) -> Result<AppReport> {
-        let (mode, notes, next_steps) = match self.source {
-            DiscoverSourceArg::TiktokSounds => (
-                DiscoverSource::TiktokSounds,
-                vec![
-                    "Official TikTok APIs are weak for trending sound discovery".to_string(),
-                    "MVP should use provider adapters, scraper adapters, or import mode".to_string(),
-                    "Keep direct scraping optional because anti-bot measures will change".to_string(),
-                ],
-                vec![
-                    "Add provider adapters with consistent normalized sound metadata".to_string(),
-                    "Support import by sound URL or sound ID for manual seeding".to_string(),
-                ],
-            ),
-            DiscoverSourceArg::XClips => (
-                DiscoverSource::XClips,
-                vec![
+        if self.limit == 0 {
+            bail!("--limit must be greater than 0")
+        }
+
+        let report = match self.source {
+            DiscoverSourceArg::TiktokSounds => {
+                let token = config::load_apify_token()?;
+                let client = apify::build_client()?;
+                let discovery = tiktok::discover_trending_sounds(
+                    &client,
+                    &token,
+                    &self.country,
+                    self.limit as usize,
+                    &self.period,
+                )?;
+
+                DiscoveryReport {
+                    source: DiscoverSource::TiktokSounds,
+                    provider: Some("apify".to_string()),
+                    query: self.query,
+                    limit: self.limit,
+                    country: Some(self.country),
+                    period: Some(self.period),
+                    sounds: discovery
+                        .items
+                        .iter()
+                        .map(tiktok::summarize_trending_sound)
+                        .collect(),
+                    notes: vec![
+                        format!("Uses Apify actor `{TRENDS_ACTOR_ID}` for live trend discovery"),
+                        "Each result includes sound identifiers plus the count of trend-related fallback items".to_string(),
+                    ],
+                    next_steps: vec![
+                        "Use `capcut-cli library sound import-tiktok-trending --limit <n>` to ingest video and audio assets".to_string(),
+                        "If a sound has no music-post results, the importer falls back to trend-related item ids".to_string(),
+                    ],
+                }
+            }
+            DiscoverSourceArg::XClips => DiscoveryReport {
+                source: DiscoverSource::XClips,
+                provider: None,
+                query: self.query,
+                limit: self.limit,
+                country: None,
+                period: None,
+                sounds: Vec::new(),
+                notes: vec![
                     "Prototype discovery via X search plus engagement metrics".to_string(),
                     "Require attached video media and rank by likes, reposts, replies, quotes, views, and recency".to_string(),
                     "Media retrieval may still require a separate downloader/import adapter".to_string(),
                 ],
-                vec![
+                next_steps: vec![
                     "Add X API credential support and search adapters".to_string(),
                     "Add downloader abstraction for video asset retrieval".to_string(),
                 ],
-            ),
+            },
         };
 
-        Ok(AppReport::Discovery(DiscoveryReport {
-            source: mode,
-            query: self.query,
-            limit: self.limit,
-            notes,
-            next_steps,
-        }))
+        Ok(AppReport::Discovery(report))
     }
 }
 
@@ -98,6 +198,27 @@ enum DiscoverSourceArg {
 
 #[derive(Debug, Args)]
 struct LibraryArgs {
+    #[command(subcommand)]
+    command: LibraryCommand,
+}
+
+impl LibraryArgs {
+    fn run(self) -> Result<AppReport> {
+        match self.command {
+            LibraryCommand::Plan(args) => args.run(),
+            LibraryCommand::Sound(sound_args) => sound_args.run(),
+        }
+    }
+}
+
+#[derive(Debug, Subcommand)]
+enum LibraryCommand {
+    Plan(LibraryPlanArgs),
+    Sound(SoundArgs),
+}
+
+#[derive(Debug, Args)]
+struct LibraryPlanArgs {
     #[arg(value_enum)]
     asset_type: AssetTypeArg,
 
@@ -108,7 +229,7 @@ struct LibraryArgs {
     id: Option<String>,
 }
 
-impl LibraryArgs {
+impl LibraryPlanArgs {
     fn run(self) -> Result<AppReport> {
         Ok(AppReport::Library(LibraryReport {
             asset_type: self.asset_type.as_str().to_string(),
@@ -117,11 +238,13 @@ impl LibraryArgs {
             required_metadata: match self.asset_type {
                 AssetTypeArg::Sound => vec![
                     "source_url".to_string(),
+                    "source_video_url".to_string(),
                     "platform".to_string(),
                     "duration_seconds".to_string(),
                     "creator".to_string(),
-                    "license_or_rights_note".to_string(),
+                    "local_video_path".to_string(),
                     "local_audio_path".to_string(),
+                    "local_metadata_path".to_string(),
                 ],
                 AssetTypeArg::Clip => vec![
                     "source_url".to_string(),
@@ -148,6 +271,95 @@ impl AssetTypeArg {
             AssetTypeArg::Sound => "sound",
             AssetTypeArg::Clip => "clip",
         }
+    }
+}
+
+#[derive(Debug, Args)]
+struct SoundArgs {
+    #[command(subcommand)]
+    command: SoundCommand,
+}
+
+impl SoundArgs {
+    fn run(self) -> Result<AppReport> {
+        match self.command {
+            SoundCommand::ImportTiktokTrending(args) => args.run(),
+        }
+    }
+}
+
+#[derive(Debug, Subcommand)]
+enum SoundCommand {
+    ImportTiktokTrending(ImportTiktokTrendingArgs),
+}
+
+#[derive(Debug, Args)]
+struct ImportTiktokTrendingArgs {
+    #[arg(long, default_value = "United States")]
+    country: String,
+
+    #[arg(long, default_value_t = 3)]
+    limit: usize,
+
+    #[arg(long, default_value = "7")]
+    period: String,
+
+    #[arg(long, default_value_t = 30)]
+    max_posts: usize,
+
+    #[arg(long, default_value_t = 5)]
+    download_attempts: usize,
+
+    #[arg(long)]
+    output_dir: Option<PathBuf>,
+}
+
+impl ImportTiktokTrendingArgs {
+    fn run(self) -> Result<AppReport> {
+        if self.limit == 0 {
+            bail!("--limit must be greater than 0")
+        }
+        if self.max_posts == 0 {
+            bail!("--max-posts must be greater than 0")
+        }
+        if self.download_attempts == 0 {
+            bail!("--download-attempts must be greater than 0")
+        }
+
+        let token = config::load_apify_token()?;
+        let client = apify::build_client()?;
+        let output_dir = self
+            .output_dir
+            .unwrap_or_else(|| PathBuf::from(DEFAULT_IMPORT_OUTPUT_DIR));
+        let result = tiktok::import_trending_sounds(
+            &client,
+            &token,
+            &ImportTrendingSoundsOptions {
+                country: self.country,
+                limit: self.limit,
+                period: self.period,
+                max_posts: self.max_posts,
+                download_attempts: self.download_attempts,
+                output_dir: output_dir.clone(),
+                manifest_path: PathBuf::from(LIBRARY_MANIFEST_PATH),
+            },
+        )?;
+
+        Ok(AppReport::SoundImport(SoundImportReport {
+            provider: "apify".to_string(),
+            actor_chain: vec![
+                TRENDS_ACTOR_ID.to_string(),
+                MUSIC_POSTS_ACTOR_ID.to_string(),
+                VIDEO_DOWNLOADER_ACTOR_ID.to_string(),
+            ],
+            attempted_count: result.imported.len() + result.failed.len(),
+            imported_count: result.imported.len(),
+            failed_count: result.failed.len(),
+            imported: result.imported,
+            failed: result.failed,
+            manifest_path: result.manifest_path.display().to_string(),
+            output_dir: output_dir.display().to_string(),
+        }))
     }
 }
 

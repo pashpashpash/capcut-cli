@@ -3,16 +3,38 @@ use serde::Serialize;
 #[derive(Debug, Serialize)]
 #[serde(tag = "report", rename_all = "snake_case")]
 pub enum AppReport {
+    Auth(AuthReport),
+    SoundImport(SoundImportReport),
     Discovery(DiscoveryReport),
     Library(LibraryReport),
     Media(MediaReport),
 }
 
 #[derive(Debug, Serialize)]
+pub struct AuthReport {
+    pub provider: String,
+    pub action: String,
+    pub scope: String,
+    pub config_path: String,
+    pub env_var: String,
+    pub token_present: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub configured_via: Option<String>,
+}
+
+#[derive(Debug, Serialize)]
 pub struct DiscoveryReport {
     pub source: DiscoverSource,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub provider: Option<String>,
     pub query: Option<String>,
     pub limit: u32,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub country: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub period: Option<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub sounds: Vec<DiscoveredSound>,
     pub notes: Vec<String>,
     pub next_steps: Vec<String>,
 }
@@ -22,6 +44,19 @@ pub struct DiscoveryReport {
 pub enum DiscoverSource {
     TiktokSounds,
     XClips,
+}
+
+#[derive(Debug, Serialize)]
+pub struct DiscoveredSound {
+    pub rank: u32,
+    pub title: String,
+    pub author: String,
+    pub song_id: String,
+    pub clip_id: String,
+    pub trend_link: String,
+    pub duration_seconds: u32,
+    pub country_code: String,
+    pub related_item_count: usize,
 }
 
 #[derive(Debug, Serialize)]
@@ -53,4 +88,48 @@ pub enum PipelineStepKind {
     TrimClips,
     ScaleAndCrop,
     Mux,
+}
+
+#[derive(Debug, Serialize)]
+pub struct SoundImportReport {
+    pub provider: String,
+    pub actor_chain: Vec<String>,
+    pub attempted_count: usize,
+    pub imported_count: usize,
+    pub failed_count: usize,
+    pub imported: Vec<ImportedSound>,
+    pub failed: Vec<FailedSoundImport>,
+    pub manifest_path: String,
+    pub output_dir: String,
+}
+
+#[derive(Debug, Serialize)]
+pub struct ImportedSound {
+    pub id: String,
+    pub rank: u32,
+    pub title: String,
+    pub author: String,
+    pub song_id: String,
+    pub clip_id: String,
+    pub trend_link: String,
+    pub selected_video_url: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub selected_video_id: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub selected_comment_count: Option<u64>,
+    pub candidate_posts_considered: usize,
+    pub downloader_actor: String,
+    pub local_video_path: String,
+    pub local_audio_path: String,
+    pub local_metadata_path: String,
+}
+
+#[derive(Debug, Serialize)]
+pub struct FailedSoundImport {
+    pub rank: u32,
+    pub title: String,
+    pub song_id: String,
+    pub clip_id: String,
+    pub trend_link: String,
+    pub error: String,
 }

@@ -1,134 +1,113 @@
 # capcut-cli
 
-An open source, agent-first video editing CLI for generating short social clips without touching a timeline.
+An open source, agent-first Rust CLI for discovering, importing, and composing short-form social video assets.
 
-## What this is
+## What works now
 
-`capcut-cli` is a Rust project for agents that need to assemble short-form videos programmatically.
+The main working path is a TikTok trending sound ingestion pipeline built around Apify:
 
-The goal is not to recreate a full nonlinear editor. The goal is to expose the primitives an agent actually needs:
+1. discover trending sounds with `alien_force~tiktok-trending-sounds-tracker`
+2. fetch posts for each sound with `powerai~tiktok-music-posts-video-scraper`
+3. rank candidate posts with a comment-heavy sort
+4. fall back to the trend actor's `related_items` when music-post results are empty
+5. download the representative video with `dltik~tiktok-video-downloader`
+6. extract audio locally with `ffmpeg`
+7. persist video, audio, per-step metadata, and manifest entries in-repo
 
-- discover and collect candidate media
-- ingest audio and video assets into a local library
-- trim and normalize clips
-- align visuals to audio
-- compose short videos from reusable pipelines
-- export social-ready outputs for surfaces like Twitter/X
-- operate entirely from a command line interface
+The CLI stays machine-readable throughout, so agents can inspect every step without scraping terminal text.
 
-## Project goals
+## Prerequisites
 
-This project starts from four immediate requirements:
+- Rust toolchain
+- `ffmpeg` on `PATH`
+- an Apify token
 
-1. Research how to pull trending sounds from TikTok programmatically
-2. Research how to pull viral video clips from Twitter/X
-3. Build a prototype that combines trending audio with relevant video into short clips suitable for posting on Twitter/X
-4. Package the whole thing as an agent-first CLI
+## Auth
 
-## Design principles
-
-### Agent-first
-
-Every important action should be scriptable, composable, and inspectable.
-
-That means:
-
-- stable CLI commands
-- machine-readable JSON output where useful
-- predictable file layouts
-- explicit inputs and outputs
-- no GUI dependency
-- no hidden timeline state
-
-### Library-backed
-
-Part of this repository will become a large library of sounds and clips.
-
-The CLI should eventually manage:
-
-- metadata for downloaded and curated sounds
-- metadata for source clips
-- tags, themes, and semantic relevance
-- deduplication
-- provenance tracking
-- prepared intermediates for fast recomposition
-
-### Rust core
-
-Rust is the implementation language for reliability, portability, and strong CLI ergonomics.
-
-Likely building blocks include:
-
-- `clap` for CLI structure
-- `serde` and `serde_json` for config and machine-readable output
-- `tokio` for async network and pipeline orchestration
-- `reqwest` for HTTP/API access
-- `ffmpeg` invoked as a system dependency for actual media transforms
-
-## Proposed shape
-
-### Commands
-
-Possible early command surface:
-
-- `capcut-cli research tiktok-sounds`
-- `capcut-cli research twitter-clips`
-- `capcut-cli library import-sound`
-- `capcut-cli library import-clip`
-- `capcut-cli compose short`
-- `capcut-cli export twitter`
-
-### Repository layout
-
-Possible initial layout:
-
-- `src/cli/` for command definitions
-- `src/research/` for source-specific acquisition logic
-- `src/library/` for asset registry and metadata
-- `src/media/` for ffmpeg pipeline generation
-- `src/compose/` for clip assembly logic
-- `library/` for local asset manifests and indexes
-- `notes/` for ongoing research findings
-
-## Immediate next steps
-
-- put up this README
-- research the acquisition paths for TikTok sounds and Twitter/X clips
-- map the legal and technical constraints around each source
-- sketch the MVP architecture
-- build the first committed sound library deliverable
-- post progress updates as the work becomes concrete
-
-## First deliverable
-
-The first concrete deliverable is a committed library of popular TikTok sounds, plus a pipeline for adding more over time.
-
-That means:
-
-- committed sound metadata in the repo
-- committed sample audio files for preview and feedback
-- a documented acquisition pipeline
-- CLI primitives that will eventually automate discovery and refresh
-
-## Status
-
-Day one, but no longer just a placeholder.
-
-Current state:
-
-- README and initial research notes are in place
-- first Rust CLI scaffold exists
-- commands now emit structured JSON for discovery, library planning, and composition planning
-- next step is wiring real source adapters and ffmpeg-backed rendering
-
-## Current CLI surface
+Check current auth state:
 
 ```bash
-capcut-cli discover tiktok-sounds --limit 10
-capcut-cli discover x-clips --query "ai agents" --limit 10
-capcut-cli library sound --from <url-or-provider> --id <optional-id>
-capcut-cli library clip --from <url-or-provider> --id <optional-id>
-capcut-cli compose --sound sound_123 --clip clip_a --clip clip_b --duration-seconds 30
+cargo run -- auth
 ```
 
-Each command currently returns machine-readable JSON so an agent can inspect the plan before the implementation becomes fully operational.
+Persist a token directly:
+
+```bash
+cargo run -- auth --apify "$APIFY_API_TOKEN"
+```
+
+Persist the current `CAPCUT_CLI_APIFY_TOKEN` env var:
+
+```bash
+export CAPCUT_CLI_APIFY_TOKEN="$APIFY_API_TOKEN"
+cargo run -- auth --from-env
+```
+
+The config file lives at `~/.config/capcut-cli/config.json`. At runtime, `CAPCUT_CLI_APIFY_TOKEN` still overrides the file.
+
+## Discover trending TikTok sounds
+
+```bash
+cargo run -- discover tiktok-sounds --country "United States" --period 7 --limit 5
+```
+
+This returns live sound metadata from Apify, including `song_id`, `clip_id`, and the count of fallback `related_items`.
+
+## Import trending TikTok sounds
+
+```bash
+cargo run -- library sound import-tiktok-trending \
+  --country "United States" \
+  --period 7 \
+  --limit 3 \
+  --max-posts 30 \
+  --download-attempts 5
+```
+
+What the importer does for each sound:
+
+1. writes `trend.json` with the trend actor payload
+2. writes `posts.json` with the music-post actor payload
+3. writes `selection.json` with normalized/ranked candidate posts
+4. tries the top ranked candidate URLs with `dltik`
+5. stores the winning `video.mp4`
+6. extracts `audio.mp3` locally with `ffmpeg`
+7. writes `download.json` and a summary `metadata.json`
+8. merges the result into `library/sounds/manifest.json`
+
+The ranking strategy is explicit and stable: `comment_count desc`, then `share_count`, then `digg_count`, then `play_count`.
+
+## Output layout
+
+Imported sounds are written under `library/sounds/imported/<slug>/`:
+
+- `trend.json`
+- `posts.json`
+- `selection.json`
+- `download.json`
+- `metadata.json`
+- `video.mp4`
+- `audio.mp3`
+
+The top-level manifest records provenance plus local paths for both media files and the step metadata.
+
+## CLI surface
+
+```bash
+cargo run -- auth
+cargo run -- auth --apify <token>
+cargo run -- auth --from-env
+cargo run -- discover tiktok-sounds --limit 10
+cargo run -- discover x-clips --query "ai agents" --limit 10
+cargo run -- library plan sound
+cargo run -- library sound import-tiktok-trending --limit 3 --max-posts 30 --download-attempts 5
+cargo run -- compose --sound sound_123 --clip clip_a --clip clip_b --duration-seconds 30
+```
+
+## Status of X support
+
+`discover x-clips` is still a planning stub. The TikTok import path is the only live end-to-end ingestion pipeline in the repo today.
+
+## Rights
+
+Downloaded media should be treated as research and prototyping assets unless rights have been separately verified. The importer records provenance and rights notes so the local library does not lose source context.

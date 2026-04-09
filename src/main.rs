@@ -1,5 +1,8 @@
+mod apify;
 mod cli;
+mod config;
 mod models;
+mod tiktok;
 
 use clap::Parser;
 
