@@ -69,7 +69,10 @@ pub fn load_apify_token() -> Result<String> {
 
     let config = read_config()?;
     if config.apify_api_token.trim().is_empty() {
-        bail!("Apify token is empty. Set {} or run `capcut-cli auth --apify <token>` first.", APIFY_CONFIG_ENV)
+        bail!(
+            "Apify token is empty. Set {} or run `capcut-cli auth --apify <token>` first.",
+            APIFY_CONFIG_ENV
+        )
     }
 
     Ok(config.apify_api_token)
@@ -150,8 +153,8 @@ fn read_local_secret_token() -> Result<Option<String>> {
         return Ok(None);
     }
 
-    let value = fs::read_to_string(&path)
-        .with_context(|| format!("failed to read {}", path.display()))?;
+    let value =
+        fs::read_to_string(&path).with_context(|| format!("failed to read {}", path.display()))?;
     let trimmed = value.trim();
     if trimmed.is_empty() {
         bail!("{} exists but is empty", path.display())

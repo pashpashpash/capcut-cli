@@ -55,7 +55,7 @@ Defaults reflect the current product decision:
 - US region
 - last month
 - top-liked bias via `sortType: 1`
-- choose the top-liked returned post
+- keep the top-liked returned post as the representative asset while retaining the full usable asset bag
 
 ## Common examples
 
@@ -116,8 +116,8 @@ Under `library/sounds/imported/<slug>/`:
 - `selection.json`
 - `download.json`
 - `metadata.json`
-- `video.mp4` if direct video retrieval succeeds
-- `audio.mp3` or equivalent extracted/normalized audio file
+- `videos/`
+- `audios/`
 
 ## Rules for agents
 
@@ -125,4 +125,4 @@ Under `library/sounds/imported/<slug>/`:
 - Never paste the token into tracked files, commits, issues, or PR text
 - Prefer running real smoke tests over claiming success from unit tests alone
 - If Apify or DNS fails, report the exact blocker instead of faking completion
-- Keep raw actor payloads in step artifacts so the pipeline stays inspectable
+- Keep raw actor payloads and per-candidate download metadata in step artifacts so the pipeline stays inspectable

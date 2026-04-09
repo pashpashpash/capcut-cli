@@ -100,9 +100,11 @@ Selection behavior:
 - rank candidates by `digg_count` descending
 - use resolver order as the only tie-breaker
 - keep `related_items` only as debug metadata
-- try the next ranked candidate only if the preferred row does not expose a usable direct video media URL
+- keep the top-ranked downloadable post as the representative asset for manifest/reporting
+- download every retained candidate that exposes a usable direct or public media URL
 
 `--max-posts` caps the ranked candidates retained locally after the resolver returns its fixed `limit: 20` dataset.
+`--download-attempts` is the per-candidate retry budget for direct media download.
 
 ## Expected artifacts
 
@@ -113,10 +115,10 @@ Each imported sound directory under `library/sounds/imported/` should contain:
 - `selection.json`
 - `download.json`
 - `metadata.json`
-- `video.mp4`
-- `audio.mp3`
+- `videos/`
+- `audios/`
 
-`library/sounds/manifest.json` should also be updated with provenance, media paths, and representative post metrics.
+`library/sounds/manifest.json` should also be updated with provenance, representative media paths, multi-asset directory paths, and downloaded/extracted asset counts.
 
 For more raw Apify-oriented examples, also see `skills/apify/SKILL.md`.
 
@@ -124,6 +126,6 @@ For more raw Apify-oriented examples, also see `skills/apify/SKILL.md`.
 
 - Do not commit API keys or copied config files.
 - Prefer machine-readable JSON command output over prose when chaining commands.
-- Verify both `video.mp4` and `audio.mp3` exist before claiming an import succeeded.
+- Verify `videos/` and `audios/` exist and contain at least one representative video/audio pair before claiming an import succeeded.
 - Treat DNS/connectivity failures to `api.apify.com` as environment blockers, not actor-shape regressions.
 - Treat imported media as research/prototyping assets unless rights are separately verified.

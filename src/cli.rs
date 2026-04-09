@@ -8,12 +8,13 @@ use crate::{
     config::{self, APIFY_CONFIG_ENV, TIKTOK_SOUND_RESOLVER_ACTOR_ID_ENV},
     models::{
         AppReport, AuthReport, DiscoverSource, DiscoveryReport, LibraryReport, MediaReport,
-        PipelineStep, PipelineStepKind, SoundImportReport,
+        PipelineStep, PipelineStepKind, SoundImportReport, UpdateReport,
     },
     tiktok::{
         self, DEFAULT_IMPORT_OUTPUT_DIR, ImportTrendingSoundsOptions, LIBRARY_MANIFEST_PATH,
         TRENDS_ACTOR_ID,
     },
+    update,
 };
 
 #[derive(Debug, Parser)]
@@ -34,6 +35,7 @@ impl Cli {
             Command::Discover(args) => args.run(),
             Command::Library(args) => args.run(),
             Command::Compose(args) => args.run(),
+            Command::Update(args) => args.run(),
         }?;
 
         println!("{}", serde_json::to_string_pretty(&report)?);
@@ -47,6 +49,7 @@ enum Command {
     Discover(DiscoverArgs),
     Library(LibraryArgs),
     Compose(ComposeArgs),
+    Update(UpdateArgs),
 }
 
 #[derive(Debug, Args)]
@@ -248,6 +251,8 @@ impl LibraryPlanArgs {
                     "creator".to_string(),
                     "local_video_path".to_string(),
                     "local_audio_path".to_string(),
+                    "local_videos_dir".to_string(),
+                    "local_audios_dir".to_string(),
                     "local_metadata_path".to_string(),
                 ],
                 AssetTypeArg::Clip => vec![
@@ -410,6 +415,35 @@ impl ComposeArgs {
                             .to_string(),
                 },
             ],
+        }))
+    }
+}
+
+#[derive(Debug, Args)]
+struct UpdateArgs {
+    #[arg(long)]
+    bin_path: Option<PathBuf>,
+
+    #[arg(long, default_value_t = false)]
+    force: bool,
+}
+
+impl UpdateArgs {
+    fn run(self) -> Result<AppReport> {
+        let report = update::update_cli(update::UpdateOptions {
+            bin_path: self.bin_path,
+            force: self.force,
+        })?;
+
+        Ok(AppReport::Update(UpdateReport {
+            action: report.action,
+            repository: report.repository,
+            current_version: report.current_version,
+            target_version: report.target_version,
+            status: report.status,
+            asset_name: report.asset_name,
+            download_url: report.download_url,
+            install_path: report.install_path,
         }))
     }
 }

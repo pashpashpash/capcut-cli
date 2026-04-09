@@ -78,6 +78,15 @@ enum CandidatePostSource {
 }
 
 #[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "snake_case")]
+enum DownloadStatus {
+    Downloaded,
+    DownloadedVideoOnly,
+    SkippedMissingMediaUrl,
+    Failed,
+}
+
+#[derive(Debug, Clone, Serialize)]
 struct CandidatePost {
     selection_rank: usize,
     resolver_index: usize,
@@ -132,22 +141,38 @@ struct CandidateSelectionArtifact {
     candidates: Vec<CandidatePost>,
 }
 
-#[derive(Debug, Serialize)]
-struct DownloadAttemptArtifact {
+#[derive(Debug, Clone, Serialize)]
+struct CandidateDownloadAttemptArtifact {
     attempt_number: usize,
+    error: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+struct CandidateDownloadArtifact {
     candidate_rank: usize,
+    resolver_index: usize,
     candidate_source: CandidatePostSource,
     candidate_video_id: String,
     candidate_video_url: String,
     resolved_direct_video_url: Option<String>,
     resolved_audio_url: Option<String>,
+    local_video_path: Option<String>,
+    local_audio_path: Option<String>,
+    status: DownloadStatus,
     error: Option<String>,
+    attempts: Vec<CandidateDownloadAttemptArtifact>,
 }
 
 #[derive(Debug, Serialize)]
 struct DownloadArtifact {
     method: String,
-    attempts: Vec<DownloadAttemptArtifact>,
+    requested_candidate_count: usize,
+    successful_video_count: usize,
+    extracted_audio_count: usize,
+    representative_video_id: Option<String>,
+    representative_local_video_path: Option<String>,
+    representative_local_audio_path: Option<String>,
+    assets: Vec<CandidateDownloadArtifact>,
 }
 
 #[derive(Debug, Serialize)]
@@ -161,9 +186,12 @@ struct ImportedSoundMetadata {
     song_id: String,
     country_code: String,
     duration_seconds: u32,
+    downloaded_video_count: usize,
+    extracted_audio_count: usize,
     actors: ActorChainMetadata,
     selection: SelectionSummary,
     files: LocalArtifacts,
+    assets: Vec<DownloadedAssetMetadata>,
     provenance: String,
     rights_note: String,
 }
@@ -179,14 +207,14 @@ struct ActorChainMetadata {
 struct SelectionSummary {
     ranking_strategy: String,
     candidate_count: usize,
-    selected_video_id: String,
-    selected_video_url: String,
-    selected_direct_video_url: String,
-    selected_audio_url: Option<String>,
-    selected_comment_count: Option<u64>,
-    selected_share_count: Option<u64>,
-    selected_like_count: Option<u64>,
-    selected_view_count: Option<u64>,
+    representative_video_id: String,
+    representative_video_url: String,
+    representative_direct_video_url: String,
+    representative_audio_url: Option<String>,
+    representative_comment_count: Option<u64>,
+    representative_share_count: Option<u64>,
+    representative_like_count: Option<u64>,
+    representative_view_count: Option<u64>,
 }
 
 #[derive(Debug, Serialize)]
@@ -196,8 +224,32 @@ struct LocalArtifacts {
     selection_path: String,
     download_path: String,
     metadata_path: String,
+    videos_dir: String,
+    audios_dir: String,
+    representative_video_path: String,
+    representative_audio_path: String,
+}
+
+#[derive(Debug, Serialize)]
+struct DownloadedAssetMetadata {
+    candidate_rank: usize,
+    resolver_index: usize,
+    source: CandidatePostSource,
+    video_id: String,
+    video_url: String,
+    direct_video_url: String,
+    audio_url: Option<String>,
+    author_unique_id: Option<String>,
+    author_nickname: Option<String>,
+    title: Option<String>,
+    region: Option<String>,
+    duration_seconds: Option<u32>,
+    play_count: Option<u64>,
+    like_count: Option<u64>,
+    comment_count: Option<u64>,
+    share_count: Option<u64>,
     local_video_path: String,
-    local_audio_path: String,
+    local_audio_path: Option<String>,
 }
 
 #[derive(Debug, Deserialize, Serialize, Default)]
@@ -235,6 +287,16 @@ struct ManifestEntry {
     #[serde(default)]
     local_selection_path: Option<String>,
     #[serde(default)]
+    local_download_path: Option<String>,
+    #[serde(default)]
+    local_videos_dir: Option<String>,
+    #[serde(default)]
+    local_audios_dir: Option<String>,
+    #[serde(default)]
+    downloaded_video_count: Option<usize>,
+    #[serde(default)]
+    extracted_audio_count: Option<usize>,
+    #[serde(default)]
     representative_video_url: Option<String>,
     #[serde(default)]
     representative_video_id: Option<String>,
@@ -258,11 +320,16 @@ struct CandidateSelectionResult {
 }
 
 struct DownloadResolution {
-    selected_candidate: CandidatePost,
+    downloaded_assets: Vec<DownloadedAsset>,
+    asset_artifacts: Vec<CandidateDownloadArtifact>,
+}
+
+#[derive(Debug, Clone)]
+struct DownloadedAsset {
+    candidate: CandidatePost,
     selected_media_url: String,
-    attempts: Vec<DownloadAttemptArtifact>,
     video_path: PathBuf,
-    audio_path: PathBuf,
+    audio_path: Option<PathBuf>,
 }
 
 struct ImportedSoundRecord {
@@ -422,14 +489,15 @@ fn import_trending_sound_item(
     let slug = slugify(&format!("{}-{}-{}", item.rank, item.title, item.song_id));
     let sound_id = format!("tiktok_sound_{}", item.song_id);
     let sound_dir = options.output_dir.join(&slug);
-    fs::create_dir_all(&sound_dir)
-        .with_context(|| format!("failed to create {}", sound_dir.display()))?;
+    prepare_sound_dir(&sound_dir)?;
 
     let trend_path = sound_dir.join("trend.json");
     let posts_path = sound_dir.join("posts.json");
     let selection_path = sound_dir.join("selection.json");
     let download_path = sound_dir.join("download.json");
     let metadata_path = sound_dir.join("metadata.json");
+    let videos_dir = sound_dir.join("videos");
+    let audios_dir = sound_dir.join("audios");
 
     write_json(
         &trend_path,
@@ -450,10 +518,12 @@ fn import_trending_sound_item(
     write_json(&posts_path, &candidates.resolver_posts_artifact)?;
     write_json(&selection_path, &candidates.selection_artifact)?;
 
-    let download = download_best_candidate_media(
+    let download = download_candidate_media_assets(
         client,
         token,
         &sound_dir,
+        &videos_dir,
+        &audios_dir,
         &candidates.selection_artifact.candidates,
         options.download_attempts,
     )?;
@@ -461,16 +531,77 @@ fn import_trending_sound_item(
         &download_path,
         &DownloadArtifact {
             method: DIRECT_DOWNLOAD_METHOD.to_string(),
-            attempts: download.attempts,
+            requested_candidate_count: candidates.selection_artifact.candidates.len(),
+            successful_video_count: download.downloaded_video_count(),
+            extracted_audio_count: download.extracted_audio_count(),
+            representative_video_id: download
+                .representative_asset()
+                .map(|asset| asset.candidate.video_id.clone()),
+            representative_local_video_path: download
+                .representative_asset()
+                .map(|asset| asset.video_path.display().to_string()),
+            representative_local_audio_path: download
+                .representative_asset()
+                .and_then(|asset| asset.audio_path.as_ref())
+                .map(|path| path.display().to_string()),
+            assets: download.asset_artifacts.clone(),
         },
     )?;
+
+    if download.downloaded_video_count() == 0 {
+        bail!(
+            "resolver actor {} returned candidates for sound {} but none exposed a usable media URL that downloaded successfully",
+            options.resolver_actor_id,
+            item.link
+        )
+    }
+
+    let representative_asset = download.representative_asset().ok_or_else(|| {
+        anyhow!(
+            "downloaded {} videos for sound {} but could not extract audio from any of them",
+            download.downloaded_video_count(),
+            item.link
+        )
+    })?;
+    let representative_audio_path = representative_asset
+        .audio_path
+        .as_ref()
+        .context("representative asset is missing extracted audio")?;
 
     let rights_note =
         "For research and internal prototyping only. Verify rights before redistribution or production use."
             .to_string();
     let provenance =
-        "Imported from Apify trending sounds, resolved from the sound URL with a Novi actor, selected by top like count, downloaded directly from resolver media output, and audio extracted locally with ffmpeg."
+        "Imported from Apify trending sounds, resolved from the sound URL with a Novi actor, ranked by like count, downloaded for every usable resolver post media URL, and audio extracted locally with ffmpeg for each downloaded video when possible."
             .to_string();
+
+    let downloaded_assets = download
+        .downloaded_assets
+        .iter()
+        .map(|asset| DownloadedAssetMetadata {
+            candidate_rank: asset.candidate.selection_rank,
+            resolver_index: asset.candidate.resolver_index,
+            source: asset.candidate.source.clone(),
+            video_id: asset.candidate.video_id.clone(),
+            video_url: asset.candidate.video_url.clone(),
+            direct_video_url: asset.selected_media_url.clone(),
+            audio_url: asset.candidate.audio_url.clone(),
+            author_unique_id: asset.candidate.author_unique_id.clone(),
+            author_nickname: asset.candidate.author_nickname.clone(),
+            title: asset.candidate.title.clone(),
+            region: asset.candidate.region.clone(),
+            duration_seconds: asset.candidate.duration_seconds,
+            play_count: asset.candidate.play_count,
+            like_count: asset.candidate.digg_count,
+            comment_count: asset.candidate.comment_count,
+            share_count: asset.candidate.share_count,
+            local_video_path: asset.video_path.display().to_string(),
+            local_audio_path: asset
+                .audio_path
+                .as_ref()
+                .map(|path| path.display().to_string()),
+        })
+        .collect::<Vec<_>>();
 
     let metadata = ImportedSoundMetadata {
         id: sound_id.clone(),
@@ -481,10 +612,12 @@ fn import_trending_sound_item(
         clip_id: item.clip_id.clone(),
         song_id: item.song_id.clone(),
         country_code: item.country_code.clone(),
-        duration_seconds: download
-            .selected_candidate
+        duration_seconds: representative_asset
+            .candidate
             .duration_seconds
             .unwrap_or(item.duration),
+        downloaded_video_count: download.downloaded_video_count(),
+        extracted_audio_count: download.extracted_audio_count(),
         actors: ActorChainMetadata {
             trends_actor: TRENDS_ACTOR_ID.to_string(),
             sound_resolver_actor: options.resolver_actor_id.clone(),
@@ -493,14 +626,14 @@ fn import_trending_sound_item(
         selection: SelectionSummary {
             ranking_strategy: candidates.selection_artifact.ranking_strategy.clone(),
             candidate_count: candidates.selection_artifact.candidates.len(),
-            selected_video_id: download.selected_candidate.video_id.clone(),
-            selected_video_url: download.selected_candidate.video_url.clone(),
-            selected_direct_video_url: download.selected_media_url.clone(),
-            selected_audio_url: download.selected_candidate.audio_url.clone(),
-            selected_comment_count: download.selected_candidate.comment_count,
-            selected_share_count: download.selected_candidate.share_count,
-            selected_like_count: download.selected_candidate.digg_count,
-            selected_view_count: download.selected_candidate.play_count,
+            representative_video_id: representative_asset.candidate.video_id.clone(),
+            representative_video_url: representative_asset.candidate.video_url.clone(),
+            representative_direct_video_url: representative_asset.selected_media_url.clone(),
+            representative_audio_url: representative_asset.candidate.audio_url.clone(),
+            representative_comment_count: representative_asset.candidate.comment_count,
+            representative_share_count: representative_asset.candidate.share_count,
+            representative_like_count: representative_asset.candidate.digg_count,
+            representative_view_count: representative_asset.candidate.play_count,
         },
         files: LocalArtifacts {
             trend_path: trend_path.display().to_string(),
@@ -508,9 +641,12 @@ fn import_trending_sound_item(
             selection_path: selection_path.display().to_string(),
             download_path: download_path.display().to_string(),
             metadata_path: metadata_path.display().to_string(),
-            local_video_path: download.video_path.display().to_string(),
-            local_audio_path: download.audio_path.display().to_string(),
+            videos_dir: videos_dir.display().to_string(),
+            audios_dir: audios_dir.display().to_string(),
+            representative_video_path: representative_asset.video_path.display().to_string(),
+            representative_audio_path: representative_audio_path.display().to_string(),
         },
+        assets: downloaded_assets,
         provenance: provenance.clone(),
         rights_note: rights_note.clone(),
     };
@@ -524,28 +660,33 @@ fn import_trending_sound_item(
             platform: "tiktok".to_string(),
             trend_rank: Some(item.rank),
             source_url: item.link.clone(),
-            source_video_url: Some(download.selected_candidate.video_url.clone()),
-            duration_seconds: download
-                .selected_candidate
+            source_video_url: Some(representative_asset.candidate.video_url.clone()),
+            duration_seconds: representative_asset
+                .candidate
                 .duration_seconds
                 .or(Some(item.duration)),
-            local_audio_path: download.audio_path.display().to_string(),
+            local_audio_path: representative_audio_path.display().to_string(),
             local_metadata_path: metadata_path.display().to_string(),
             rights_note: rights_note.clone(),
             provenance: provenance.clone(),
             song_id: Some(item.song_id.clone()),
             clip_id: Some(item.clip_id.clone()),
             country_code: Some(item.country_code.clone()),
-            local_video_path: Some(download.video_path.display().to_string()),
+            local_video_path: Some(representative_asset.video_path.display().to_string()),
             local_trend_path: Some(trend_path.display().to_string()),
             local_posts_path: Some(posts_path.display().to_string()),
             local_selection_path: Some(selection_path.display().to_string()),
-            representative_video_url: Some(download.selected_candidate.video_url.clone()),
-            representative_video_id: Some(download.selected_candidate.video_id.clone()),
-            representative_comment_count: download.selected_candidate.comment_count,
-            representative_share_count: download.selected_candidate.share_count,
-            representative_like_count: download.selected_candidate.digg_count,
-            representative_view_count: download.selected_candidate.play_count,
+            local_download_path: Some(download_path.display().to_string()),
+            local_videos_dir: Some(videos_dir.display().to_string()),
+            local_audios_dir: Some(audios_dir.display().to_string()),
+            downloaded_video_count: Some(download.downloaded_video_count()),
+            extracted_audio_count: Some(download.extracted_audio_count()),
+            representative_video_url: Some(representative_asset.candidate.video_url.clone()),
+            representative_video_id: Some(representative_asset.candidate.video_id.clone()),
+            representative_comment_count: representative_asset.candidate.comment_count,
+            representative_share_count: representative_asset.candidate.share_count,
+            representative_like_count: representative_asset.candidate.digg_count,
+            representative_view_count: representative_asset.candidate.play_count,
             resolver_actor_id: Some(options.resolver_actor_id.clone()),
             download_method: Some(DIRECT_DOWNLOAD_METHOD.to_string()),
         },
@@ -557,15 +698,19 @@ fn import_trending_sound_item(
             song_id: item.song_id,
             clip_id: item.clip_id,
             trend_link: item.link,
-            selected_video_url: download.selected_candidate.video_url,
-            selected_video_id: Some(download.selected_candidate.video_id),
-            selected_like_count: download.selected_candidate.digg_count,
-            selected_comment_count: download.selected_candidate.comment_count,
+            selected_video_url: representative_asset.candidate.video_url.clone(),
+            selected_video_id: Some(representative_asset.candidate.video_id.clone()),
+            selected_like_count: representative_asset.candidate.digg_count,
+            selected_comment_count: representative_asset.candidate.comment_count,
             candidate_posts_considered: candidates.selection_artifact.candidates.len(),
+            downloaded_video_count: download.downloaded_video_count(),
+            extracted_audio_count: download.extracted_audio_count(),
             resolver_actor: options.resolver_actor_id.clone(),
             download_method: DIRECT_DOWNLOAD_METHOD.to_string(),
-            local_video_path: download.video_path.display().to_string(),
-            local_audio_path: download.audio_path.display().to_string(),
+            local_videos_dir: videos_dir.display().to_string(),
+            local_audios_dir: audios_dir.display().to_string(),
+            local_video_path: representative_asset.video_path.display().to_string(),
+            local_audio_path: representative_audio_path.display().to_string(),
             local_metadata_path: metadata_path.display().to_string(),
         },
     })
@@ -646,60 +791,109 @@ fn collect_candidate_posts(
     })
 }
 
-fn download_best_candidate_media(
-    client: &Client,
-    token: &str,
-    sound_dir: &Path,
-    candidates: &[CandidatePost],
-    download_attempts: usize,
-) -> Result<DownloadResolution> {
-    let max_attempts = download_attempts.max(1).min(candidates.len());
-    let mut attempts = Vec::new();
-    let mut last_error = None;
+impl DownloadResolution {
+    fn representative_asset(&self) -> Option<&DownloadedAsset> {
+        self.downloaded_assets
+            .iter()
+            .find(|asset| asset.audio_path.is_some())
+    }
 
-    for (index, candidate) in candidates.iter().take(max_attempts).enumerate() {
-        let attempt_number = index + 1;
+    fn downloaded_video_count(&self) -> usize {
+        self.downloaded_assets.len()
+    }
 
-        match download_candidate_media(client, token, sound_dir, candidate, attempt_number) {
-            Ok((selected_media_url, video_path, audio_path, artifact)) => {
-                attempts.push(artifact);
-                return Ok(DownloadResolution {
-                    selected_candidate: candidate.clone(),
-                    selected_media_url,
-                    attempts,
-                    video_path,
-                    audio_path,
-                });
-            }
-            Err((artifact, error)) => {
-                attempts.push(artifact);
-                last_error = Some(error);
-            }
+    fn extracted_audio_count(&self) -> usize {
+        self.downloaded_assets
+            .iter()
+            .filter(|asset| asset.audio_path.is_some())
+            .count()
+    }
+}
+
+fn prepare_sound_dir(sound_dir: &Path) -> Result<()> {
+    fs::create_dir_all(sound_dir)
+        .with_context(|| format!("failed to create {}", sound_dir.display()))?;
+
+    for path in [
+        sound_dir.join("videos"),
+        sound_dir.join("audios"),
+        sound_dir.join("video.mp4"),
+        sound_dir.join("audio.mp3"),
+    ] {
+        if path.is_dir() {
+            fs::remove_dir_all(&path)
+                .with_context(|| format!("failed to remove {}", path.display()))?;
+        } else if path.exists() {
+            fs::remove_file(&path)
+                .with_context(|| format!("failed to remove {}", path.display()))?;
         }
     }
 
-    Err(last_error.unwrap_or_else(|| anyhow!("no download attempts were made")))
+    fs::create_dir_all(sound_dir.join("videos"))
+        .with_context(|| format!("failed to create {}", sound_dir.join("videos").display()))?;
+    fs::create_dir_all(sound_dir.join("audios"))
+        .with_context(|| format!("failed to create {}", sound_dir.join("audios").display()))?;
+
+    Ok(())
+}
+
+fn download_candidate_media_assets(
+    client: &Client,
+    token: &str,
+    sound_dir: &Path,
+    videos_dir: &Path,
+    audios_dir: &Path,
+    candidates: &[CandidatePost],
+    download_attempts: usize,
+) -> Result<DownloadResolution> {
+    let mut downloaded_assets = Vec::new();
+    let mut asset_artifacts = Vec::new();
+
+    for candidate in candidates {
+        let (downloaded_asset, artifact) = download_candidate_media(
+            client,
+            token,
+            sound_dir,
+            videos_dir,
+            audios_dir,
+            candidate,
+            download_attempts,
+        );
+
+        if let Some(asset) = downloaded_asset {
+            downloaded_assets.push(asset);
+        }
+        asset_artifacts.push(artifact);
+    }
+
+    Ok(DownloadResolution {
+        downloaded_assets,
+        asset_artifacts,
+    })
 }
 
 fn download_candidate_media(
     client: &Client,
     token: &str,
     sound_dir: &Path,
+    videos_dir: &Path,
+    audios_dir: &Path,
     candidate: &CandidatePost,
-    attempt_number: usize,
-) -> std::result::Result<
-    (String, PathBuf, PathBuf, DownloadAttemptArtifact),
-    (DownloadAttemptArtifact, anyhow::Error),
-> {
-    let mut artifact = DownloadAttemptArtifact {
-        attempt_number,
+    download_attempts: usize,
+) -> (Option<DownloadedAsset>, CandidateDownloadArtifact) {
+    let mut artifact = CandidateDownloadArtifact {
         candidate_rank: candidate.selection_rank,
+        resolver_index: candidate.resolver_index,
         candidate_source: candidate.source.clone(),
         candidate_video_id: candidate.video_id.clone(),
         candidate_video_url: candidate.video_url.clone(),
         resolved_direct_video_url: None,
         resolved_audio_url: candidate.audio_url.clone(),
+        local_video_path: None,
+        local_audio_path: None,
+        status: DownloadStatus::Failed,
         error: None,
+        attempts: Vec::new(),
     };
 
     let Some(media_url) = candidate
@@ -707,47 +901,100 @@ fn download_candidate_media(
         .clone()
         .or_else(|| candidate.public_media_url.clone())
     else {
-        let error = anyhow!(
+        artifact.status = DownloadStatus::SkippedMissingMediaUrl;
+        artifact.error = Some(format!(
             "candidate {} did not expose a downloadable or public media URL",
             candidate.video_url
-        );
-        artifact.error = Some(error.to_string());
-        return Err((artifact, error));
+        ));
+        return (None, artifact);
     };
     artifact.resolved_direct_video_url = Some(media_url.clone());
 
-    let temp_video = sound_dir.join(format!("video-attempt-{attempt_number}.mp4"));
-    let temp_audio = sound_dir.join(format!("audio-attempt-{attempt_number}.mp3"));
-    let final_video = sound_dir.join("video.mp4");
-    let final_audio = sound_dir.join("audio.mp3");
+    let base_name = asset_file_stem(candidate);
+    let final_video = videos_dir.join(format!("{base_name}.mp4"));
+    let final_audio = audios_dir.join(format!("{base_name}.mp3"));
+    let max_attempts = download_attempts.max(1);
 
-    if let Err(error) = apify::download_to_path(client, token, &media_url, &temp_video) {
-        let _ = fs::remove_file(&temp_video);
-        artifact.error = Some(format!("{error:#}"));
-        return Err((artifact, error));
+    for attempt_number in 1..=max_attempts {
+        let temp_video = sound_dir.join(format!(".{base_name}.download.{attempt_number}.mp4"));
+        let temp_audio = sound_dir.join(format!(".{base_name}.audio.{attempt_number}.mp3"));
+        let mut attempt = CandidateDownloadAttemptArtifact {
+            attempt_number,
+            error: None,
+        };
+
+        if let Err(error) = apify::download_to_path(client, token, &media_url, &temp_video) {
+            let _ = fs::remove_file(&temp_video);
+            attempt.error = Some(format!("{error:#}"));
+            artifact.attempts.push(attempt);
+            artifact.error = Some(format!("{error:#}"));
+            continue;
+        }
+
+        if let Err(error) = promote_temp_file(&temp_video, &final_video) {
+            let _ = fs::remove_file(&temp_video);
+            attempt.error = Some(format!("{error:#}"));
+            artifact.attempts.push(attempt);
+            artifact.error = Some(format!("{error:#}"));
+            continue;
+        }
+
+        artifact.local_video_path = Some(final_video.display().to_string());
+
+        match extract_audio_from_video(&final_video, &temp_audio) {
+            Ok(()) => match promote_temp_file(&temp_audio, &final_audio) {
+                Ok(()) => {
+                    artifact.local_audio_path = Some(final_audio.display().to_string());
+                    artifact.status = DownloadStatus::Downloaded;
+                    artifact.error = None;
+                    artifact.attempts.push(attempt);
+                    return (
+                        Some(DownloadedAsset {
+                            candidate: candidate.clone(),
+                            selected_media_url: media_url.clone(),
+                            video_path: final_video,
+                            audio_path: Some(final_audio),
+                        }),
+                        artifact,
+                    );
+                }
+                Err(error) => {
+                    let _ = fs::remove_file(&temp_audio);
+                    attempt.error = Some(format!("{error:#}"));
+                    artifact.status = DownloadStatus::DownloadedVideoOnly;
+                    artifact.error = Some(format!("{error:#}"));
+                    artifact.attempts.push(attempt);
+                    return (
+                        Some(DownloadedAsset {
+                            candidate: candidate.clone(),
+                            selected_media_url: media_url.clone(),
+                            video_path: final_video,
+                            audio_path: None,
+                        }),
+                        artifact,
+                    );
+                }
+            },
+            Err(error) => {
+                let _ = fs::remove_file(&temp_audio);
+                attempt.error = Some(format!("{error:#}"));
+                artifact.status = DownloadStatus::DownloadedVideoOnly;
+                artifact.error = Some(format!("{error:#}"));
+                artifact.attempts.push(attempt);
+                return (
+                    Some(DownloadedAsset {
+                        candidate: candidate.clone(),
+                        selected_media_url: media_url.clone(),
+                        video_path: final_video,
+                        audio_path: None,
+                    }),
+                    artifact,
+                );
+            }
+        }
     }
 
-    if let Err(error) = extract_audio_from_video(&temp_video, &temp_audio) {
-        let _ = fs::remove_file(&temp_video);
-        let _ = fs::remove_file(&temp_audio);
-        artifact.error = Some(format!("{error:#}"));
-        return Err((artifact, error));
-    }
-
-    if let Err(error) = promote_temp_file(&temp_video, &final_video) {
-        let _ = fs::remove_file(&temp_video);
-        let _ = fs::remove_file(&temp_audio);
-        artifact.error = Some(format!("{error:#}"));
-        return Err((artifact, error));
-    }
-
-    if let Err(error) = promote_temp_file(&temp_audio, &final_audio) {
-        let _ = fs::remove_file(&temp_audio);
-        artifact.error = Some(format!("{error:#}"));
-        return Err((artifact, error));
-    }
-
-    Ok((media_url, final_video, final_audio, artifact))
+    (None, artifact)
 }
 
 fn extract_audio_from_video(video_path: &Path, audio_path: &Path) -> Result<()> {
@@ -1042,6 +1289,10 @@ fn slugify(input: &str) -> String {
 
 fn candidate_key(candidate: &CandidatePost) -> String {
     format!("{}|{}", candidate.video_id, candidate.video_url)
+}
+
+fn asset_file_stem(candidate: &CandidatePost) -> String {
+    format!("{:02}-{}", candidate.selection_rank, candidate.video_id)
 }
 
 fn sort_metric(value: Option<u64>) -> u64 {

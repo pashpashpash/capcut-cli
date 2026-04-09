@@ -8,6 +8,7 @@ pub enum AppReport {
     Discovery(DiscoveryReport),
     Library(LibraryReport),
     Media(MediaReport),
+    Update(UpdateReport),
 }
 
 #[derive(Debug, Serialize)]
@@ -120,8 +121,12 @@ pub struct ImportedSound {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub selected_comment_count: Option<u64>,
     pub candidate_posts_considered: usize,
+    pub downloaded_video_count: usize,
+    pub extracted_audio_count: usize,
     pub resolver_actor: String,
     pub download_method: String,
+    pub local_videos_dir: String,
+    pub local_audios_dir: String,
     pub local_video_path: String,
     pub local_audio_path: String,
     pub local_metadata_path: String,
@@ -135,4 +140,16 @@ pub struct FailedSoundImport {
     pub clip_id: String,
     pub trend_link: String,
     pub error: String,
+}
+
+#[derive(Debug, Serialize)]
+pub struct UpdateReport {
+    pub action: String,
+    pub repository: String,
+    pub current_version: String,
+    pub target_version: String,
+    pub status: String,
+    pub asset_name: String,
+    pub download_url: String,
+    pub install_path: String,
 }

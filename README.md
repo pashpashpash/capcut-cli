@@ -9,10 +9,10 @@ The main working path is a TikTok trending sound ingestion pipeline built around
 1. discover trending sounds with `alien_force~tiktok-trending-sounds-tracker`
 2. resolve posts for each sound URL with a validated Novi actor using the repo's fixed `MUSIC` input profile
 3. normalize the resolver dataset and rank candidates by `digg_count` descending
-4. select the top-liked post, with ordered fallback only if that row does not expose a usable direct video media URL
-5. download the representative video directly from the resolver output when it already provides a public or downloadable media URL
-6. extract audio locally with `ffmpeg`
-7. persist video, audio, per-step metadata, and manifest entries in-repo
+4. keep one representative post for manifest/reporting while retaining the full ranked post set on disk
+5. download every usable resolved video directly from the resolver output
+6. extract audio locally with `ffmpeg` for every downloaded video when possible
+7. persist multi-asset video/audio bags, per-step metadata, and manifest entries in-repo
 
 The CLI stays machine-readable throughout, so agents can inspect every step without scraping terminal text.
 
@@ -106,15 +106,17 @@ What the importer does for each sound:
 1. writes `trend.json` with the trend actor payload
 2. writes `posts.json` with the raw Novi resolver dataset plus the exact resolver input profile
 3. writes `selection.json` with normalized candidates ranked by likes
-4. tries the top ranked candidates in order only until one exposes a usable direct video media URL
-5. stores the winning `video.mp4`
-6. extracts `audio.mp3` locally with `ffmpeg`
+4. attempts every ranked candidate retained by `--max-posts` and keeps every successfully downloaded video asset
+5. extracts audio into a matching file under `audios/` for each downloaded video when extraction succeeds
+6. keeps a representative asset pair for manifest/report compatibility
 7. writes `download.json` and a summary `metadata.json`
 8. merges the result into `library/sounds/manifest.json`
 
 The ranking strategy is explicit and simple: `digg_count desc`, then resolver order.
 
-`--max-posts` now caps the ranked candidates retained locally after the resolver returns its fixed `limit: 20` dataset.
+`--max-posts` caps the ranked candidates retained locally and attempted for download after the resolver returns its fixed `limit: 20` dataset.
+
+`--download-attempts` is now the per-candidate retry budget for direct media download, not a cap on how many ranked posts are attempted.
 
 ## Output layout
 
@@ -125,10 +127,46 @@ Imported sounds are written under `library/sounds/imported/<slug>/`:
 - `selection.json`
 - `download.json`
 - `metadata.json`
-- `video.mp4`
-- `audio.mp3`
+- `videos/`
+- `audios/`
 
-The top-level manifest records provenance, the resolver actor id, the download method, and local paths for both media files and the step metadata.
+The top-level manifest records provenance, the resolver actor id, the download method, representative media paths, multi-asset directory paths, and downloaded/extracted asset counts.
+
+## Install and update from GitHub releases
+
+Install the latest release archive for the current machine:
+
+```bash
+./scripts/install-from-github-release.sh
+```
+
+Override the target install directory if needed:
+
+```bash
+./scripts/install-from-github-release.sh --bin-dir "$HOME/.local/bin"
+```
+
+Once the CLI is installed, update it in place:
+
+```bash
+capcut-cli update
+```
+
+When `capcut-cli update` is run from a repo build such as `cargo run`, it defaults to installing `~/.local/bin/capcut-cli`. Override that explicitly if you want a different target path:
+
+```bash
+cargo run -- update --bin-path "$HOME/.local/bin/capcut-cli"
+```
+
+## Release automation
+
+Release automation is split into three GitHub Actions workflows:
+
+- `.github/workflows/release-please.yml` updates release PRs and tags/releases from pushes to `main`
+- `.github/workflows/build-release-binaries.yml` builds release archives on pushes to `main`
+- `.github/workflows/publish-release-assets.yml` attaches packaged archives to published GitHub releases
+
+Release archive names match the update/install path exactly: `capcut-cli-<target>.tar.gz`, with the `capcut-cli` binary at archive root.
 
 ## CLI surface
 
@@ -140,6 +178,7 @@ cargo run -- discover tiktok-sounds --limit 10
 cargo run -- discover x-clips --query "ai agents" --limit 10
 cargo run -- library plan sound
 cargo run -- library sound import-tiktok-trending --resolver-actor-id "<novi actor id>" --limit 3 --max-posts 20 --download-attempts 5
+cargo run -- update --bin-path "$HOME/.local/bin/capcut-cli"
 cargo run -- compose --sound sound_123 --clip clip_a --clip clip_b --duration-seconds 30
 ```
 
