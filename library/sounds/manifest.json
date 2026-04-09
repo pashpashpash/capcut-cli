@@ -1,0 +1,23 @@
+{
+  "version": 1,
+  "generated_at": "2026-04-08T21:36:00-07:00",
+  "notes": [
+    "First deliverable focuses on a committed library of popular TikTok sounds.",
+    "Seed entries may start as manually curated placeholders while acquisition adapters are still being built."
+  ],
+  "sounds": [
+    {
+      "id": "sound_seed_001",
+      "title": "seed preview loop",
+      "platform": "local_seed",
+      "source_url": null,
+      "creator": "capcut-cli",
+      "duration_seconds": 2.0,
+      "sample_path": "library/sounds/samples/seed-preview-loop.wav",
+      "acquisition_method": "manual_seed",
+      "rights_note": "Synthetic placeholder preview committed to establish the library format and Discord feedback loop.",
+      "tags": ["seed", "preview", "placeholder"],
+      "status": "committed_sample"
+    }
+  ]
+}
