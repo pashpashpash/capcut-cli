@@ -22,6 +22,24 @@ The CLI stays machine-readable throughout, so agents can inspect every step with
 - `ffmpeg` on `PATH`
 - an Apify token
 
+## Local secret handling for agents
+
+For repo-local end-to-end testing, put the raw Apify token in a git-ignored file:
+
+```bash
+mkdir -p .secrets
+printf '%s' "$APIFY_API_TOKEN" > .secrets/apify_api_token
+chmod 600 .secrets/apify_api_token
+```
+
+Token lookup order at runtime:
+
+1. `CAPCUT_CLI_APIFY_TOKEN`
+2. `.secrets/apify_api_token`
+3. `~/.config/capcut-cli/config.json`
+
+This lets coding agents run real imports from inside the repo without ever committing the key.
+
 ## Auth
 
 Check current auth state:
@@ -132,3 +150,8 @@ cargo run -- compose --sound sound_123 --clip clip_a --clip clip_b --duration-se
 ## Rights
 
 Downloaded media should be treated as research and prototyping assets unless rights have been separately verified. The importer records provenance and rights notes so the local library does not lose source context.
+
+## Repo skills
+
+- `skills/capcut-cli/SKILL.md` for operating the CLI
+- `skills/apify/SKILL.md` for safe live Apify usage, local secret handling, and end-to-end smoke-test examples

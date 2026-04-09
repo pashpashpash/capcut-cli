@@ -1,0 +1,15 @@
+{
+  "method": "direct_http",
+  "attempts": [
+    {
+      "attempt_number": 1,
+      "candidate_rank": 1,
+      "candidate_source": "sound_resolver_actor",
+      "candidate_video_id": "7564571947263069454",
+      "candidate_video_url": "https://www.tiktok.com/@bar.bae.toes/video/7564571947263069454?_r=1&u_code=ed1jbcldle0aae&preview_pb=0&sharer_language=en&_d=f3061j03dgm659&share_item_id=7564571947263069454&source=h5_m",
+      "resolved_direct_video_url": "https://v16m.tiktokcdn-eu.com/a05835377c93862bc26dfd7eda87ff25/69d8ac11/video/tos/maliva/tos-maliva-ve-0068c799-us/ooQyMRGfjRElDkHFCRD6f8FrTjoeAA2IJ9wGEI/?a=1233&bti=NDg5QGo7dik3OjlmNC4uYCM6bTQ0MDo%3D&ch=0&cr=13&dr=0&er=0&lr=all&net=0&cd=0%7C0%7C0%7C&cv=1&br=2482&bt=1241&cs=0&ds=3&ft=td_Lr8QLodzR12Nvzu6B.IxRKz8biq_45SY&mime_type=video_mp4&qs=0&rc=ODw0aGllOzRkODw5ZmY2ZkBpM2w2PHU5cjdlNjMzZzczNEA1YmMyYzZiNWIxXzQxXzZfYSMwc2UvMmRjcnFhLS1kMS9zcw%3D%3D&vvpl=1&l=202604090751047990F64C3CC75B1930E5&btag=e00088000",
+      "resolved_audio_url": "https://sf16-ies-music-sg.tiktokcdn.com/obj/tos-alisg-ve-2774/4033301c69b549d18a52018c4fad4680",
+      "error": null
+    }
+  ]
+}

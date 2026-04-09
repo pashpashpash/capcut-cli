@@ -5,6 +5,7 @@ use serde::{Deserialize, Serialize};
 
 pub const APIFY_CONFIG_ENV: &str = "CAPCUT_CLI_APIFY_TOKEN";
 pub const TIKTOK_SOUND_RESOLVER_ACTOR_ID_ENV: &str = "CAPCUT_CLI_TIKTOK_SOUND_RESOLVER_ACTOR_ID";
+pub const LOCAL_APIFY_TOKEN_FILE: &str = ".secrets/apify_api_token";
 
 const APP_DIR_NAME: &str = "capcut-cli";
 const CONFIG_FILE_NAME: &str = "config.json";
@@ -62,9 +63,13 @@ pub fn load_apify_token() -> Result<String> {
         }
     }
 
+    if let Some(value) = read_local_secret_token()? {
+        return Ok(value);
+    }
+
     let config = read_config()?;
     if config.apify_api_token.trim().is_empty() {
-        bail!("Apify token is empty. Run `capcut-cli auth --apify <token>` first.")
+        bail!("Apify token is empty. Set {} or run `capcut-cli auth --apify <token>` first.", APIFY_CONFIG_ENV)
     }
 
     Ok(config.apify_api_token)
@@ -93,6 +98,15 @@ pub fn apify_auth_status() -> Result<AuthStatus> {
                 configured_via: Some(AuthSource::Env),
             });
         }
+    }
+
+    if read_local_secret_token()?.is_some() {
+        return Ok(AuthStatus {
+            config_path,
+            env_var: APIFY_CONFIG_ENV,
+            token_present: true,
+            configured_via: Some(AuthSource::ConfigFile),
+        });
     }
 
     let token_present = if config_path.exists() {
@@ -128,6 +142,22 @@ pub fn load_tiktok_sound_resolver_actor_id(explicit: Option<String>) -> Result<S
         "missing TikTok sound resolver actor id. Pass `--resolver-actor-id <actor>` or set {}",
         TIKTOK_SOUND_RESOLVER_ACTOR_ID_ENV
     )
+}
+
+fn read_local_secret_token() -> Result<Option<String>> {
+    let path = PathBuf::from(LOCAL_APIFY_TOKEN_FILE);
+    if !path.exists() {
+        return Ok(None);
+    }
+
+    let value = fs::read_to_string(&path)
+        .with_context(|| format!("failed to read {}", path.display()))?;
+    let trimmed = value.trim();
+    if trimmed.is_empty() {
+        bail!("{} exists but is empty", path.display())
+    }
+
+    Ok(Some(trimmed.to_string()))
 }
 
 fn read_config() -> Result<ConfigFile> {

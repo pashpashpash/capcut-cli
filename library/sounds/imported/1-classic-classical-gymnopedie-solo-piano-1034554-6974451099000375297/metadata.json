@@ -1,0 +1,39 @@
+{
+  "id": "tiktok_sound_6974451099000375297",
+  "rank": 1,
+  "title": "Classic classical gymnopedie solo piano(1034554)",
+  "author": "Lyrebirds music",
+  "trend_link": "https://www.tiktok.com/music/x-6974451099088455681",
+  "clip_id": "6974451099088455681",
+  "song_id": "6974451099000375297",
+  "country_code": "US",
+  "duration_seconds": 41,
+  "actors": {
+    "trends_actor": "alien_force~tiktok-trending-sounds-tracker",
+    "sound_resolver_actor": "nCNiU9QG1e0nMwgWj",
+    "download_method": "direct_http"
+  },
+  "selection": {
+    "ranking_strategy": "digg_count desc, resolver order asc",
+    "candidate_count": 20,
+    "selected_video_id": "7564571947263069454",
+    "selected_video_url": "https://www.tiktok.com/@bar.bae.toes/video/7564571947263069454?_r=1&u_code=ed1jbcldle0aae&preview_pb=0&sharer_language=en&_d=f3061j03dgm659&share_item_id=7564571947263069454&source=h5_m",
+    "selected_direct_video_url": "https://v16m.tiktokcdn-eu.com/a05835377c93862bc26dfd7eda87ff25/69d8ac11/video/tos/maliva/tos-maliva-ve-0068c799-us/ooQyMRGfjRElDkHFCRD6f8FrTjoeAA2IJ9wGEI/?a=1233&bti=NDg5QGo7dik3OjlmNC4uYCM6bTQ0MDo%3D&ch=0&cr=13&dr=0&er=0&lr=all&net=0&cd=0%7C0%7C0%7C&cv=1&br=2482&bt=1241&cs=0&ds=3&ft=td_Lr8QLodzR12Nvzu6B.IxRKz8biq_45SY&mime_type=video_mp4&qs=0&rc=ODw0aGllOzRkODw5ZmY2ZkBpM2w2PHU5cjdlNjMzZzczNEA1YmMyYzZiNWIxXzQxXzZfYSMwc2UvMmRjcnFhLS1kMS9zcw%3D%3D&vvpl=1&l=202604090751047990F64C3CC75B1930E5&btag=e00088000",
+    "selected_audio_url": "https://sf16-ies-music-sg.tiktokcdn.com/obj/tos-alisg-ve-2774/4033301c69b549d18a52018c4fad4680",
+    "selected_comment_count": null,
+    "selected_share_count": null,
+    "selected_like_count": null,
+    "selected_view_count": null
+  },
+  "files": {
+    "trend_path": "library/sounds/imported/1-classic-classical-gymnopedie-solo-piano-1034554-6974451099000375297/trend.json",
+    "posts_path": "library/sounds/imported/1-classic-classical-gymnopedie-solo-piano-1034554-6974451099000375297/posts.json",
+    "selection_path": "library/sounds/imported/1-classic-classical-gymnopedie-solo-piano-1034554-6974451099000375297/selection.json",
+    "download_path": "library/sounds/imported/1-classic-classical-gymnopedie-solo-piano-1034554-6974451099000375297/download.json",
+    "metadata_path": "library/sounds/imported/1-classic-classical-gymnopedie-solo-piano-1034554-6974451099000375297/metadata.json",
+    "local_video_path": "library/sounds/imported/1-classic-classical-gymnopedie-solo-piano-1034554-6974451099000375297/video.mp4",
+    "local_audio_path": "library/sounds/imported/1-classic-classical-gymnopedie-solo-piano-1034554-6974451099000375297/audio.mp3"
+  },
+  "provenance": "Imported from Apify trending sounds, resolved from the sound URL with a Novi actor, selected by top like count, downloaded directly from resolver media output, and audio extracted locally with ffmpeg.",
+  "rights_note": "For research and internal prototyping only. Verify rights before redistribution or production use."
+}

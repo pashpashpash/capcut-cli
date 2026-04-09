@@ -1,6 +1,35 @@
 {
   "sounds": [
     {
+      "id": "tiktok_sound_6974451099000375297",
+      "title": "Classic classical gymnopedie solo piano(1034554)",
+      "author": "Lyrebirds music",
+      "platform": "tiktok",
+      "trend_rank": 1,
+      "source_url": "https://www.tiktok.com/music/x-6974451099088455681",
+      "source_video_url": "https://www.tiktok.com/@bar.bae.toes/video/7564571947263069454?_r=1&u_code=ed1jbcldle0aae&preview_pb=0&sharer_language=en&_d=f3061j03dgm659&share_item_id=7564571947263069454&source=h5_m",
+      "duration_seconds": 41,
+      "local_audio_path": "library/sounds/imported/1-classic-classical-gymnopedie-solo-piano-1034554-6974451099000375297/audio.mp3",
+      "local_metadata_path": "library/sounds/imported/1-classic-classical-gymnopedie-solo-piano-1034554-6974451099000375297/metadata.json",
+      "rights_note": "For research and internal prototyping only. Verify rights before redistribution or production use.",
+      "provenance": "Imported from Apify trending sounds, resolved from the sound URL with a Novi actor, selected by top like count, downloaded directly from resolver media output, and audio extracted locally with ffmpeg.",
+      "song_id": "6974451099000375297",
+      "clip_id": "6974451099088455681",
+      "country_code": "US",
+      "local_video_path": "library/sounds/imported/1-classic-classical-gymnopedie-solo-piano-1034554-6974451099000375297/video.mp4",
+      "local_trend_path": "library/sounds/imported/1-classic-classical-gymnopedie-solo-piano-1034554-6974451099000375297/trend.json",
+      "local_posts_path": "library/sounds/imported/1-classic-classical-gymnopedie-solo-piano-1034554-6974451099000375297/posts.json",
+      "local_selection_path": "library/sounds/imported/1-classic-classical-gymnopedie-solo-piano-1034554-6974451099000375297/selection.json",
+      "representative_video_url": "https://www.tiktok.com/@bar.bae.toes/video/7564571947263069454?_r=1&u_code=ed1jbcldle0aae&preview_pb=0&sharer_language=en&_d=f3061j03dgm659&share_item_id=7564571947263069454&source=h5_m",
+      "representative_video_id": "7564571947263069454",
+      "representative_comment_count": null,
+      "representative_share_count": null,
+      "representative_like_count": null,
+      "representative_view_count": null,
+      "resolver_actor_id": "nCNiU9QG1e0nMwgWj",
+      "download_method": "direct_http"
+    },
+    {
       "id": "sound_seed_001",
       "title": "Seed preview loop",
       "author": "capcut-cli placeholder",
@@ -12,7 +41,22 @@
       "local_audio_path": "library/sounds/samples/seed-preview-loop.wav",
       "local_metadata_path": "library/sounds/samples/seed-preview-loop.json",
       "rights_note": "Synthetic placeholder preview tone for repo scaffolding only. Not a TikTok-derived asset.",
-      "provenance": "Created locally to test repository layout before real import pipeline existed."
+      "provenance": "Created locally to test repository layout before real import pipeline existed.",
+      "song_id": null,
+      "clip_id": null,
+      "country_code": null,
+      "local_video_path": null,
+      "local_trend_path": null,
+      "local_posts_path": null,
+      "local_selection_path": null,
+      "representative_video_url": null,
+      "representative_video_id": null,
+      "representative_comment_count": null,
+      "representative_share_count": null,
+      "representative_like_count": null,
+      "representative_view_count": null,
+      "resolver_actor_id": null,
+      "download_method": null
     }
   ]
 }

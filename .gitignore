@@ -2,3 +2,4 @@
 .env.apify
 *.env
 .env*
+.secrets/

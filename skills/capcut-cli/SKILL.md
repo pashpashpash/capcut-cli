@@ -9,7 +9,15 @@ Use this skill when an agent needs to operate the local Rust CLI instead of hand
 
 ## Quick start
 
-Check auth first:
+For repo-local live testing, prefer a git-ignored secret file first:
+
+```bash
+mkdir -p .secrets
+printf '%s' "$APIFY_API_TOKEN" > .secrets/apify_api_token
+chmod 600 .secrets/apify_api_token
+```
+
+Then check auth:
 
 ```bash
 cargo run -- auth
@@ -109,6 +117,8 @@ Each imported sound directory under `library/sounds/imported/` should contain:
 - `audio.mp3`
 
 `library/sounds/manifest.json` should also be updated with provenance, media paths, and representative post metrics.
+
+For more raw Apify-oriented examples, also see `skills/apify/SKILL.md`.
 
 ## Operating rules
 
