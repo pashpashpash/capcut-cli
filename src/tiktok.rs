@@ -5,7 +5,7 @@ use std::{
     process::Command,
 };
 
-use anyhow::{Context, Result, bail};
+use anyhow::{Context, Result, anyhow, bail};
 use reqwest::blocking::Client;
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
@@ -18,10 +18,11 @@ use crate::{
 pub const DEFAULT_IMPORT_OUTPUT_DIR: &str = "library/sounds/imported";
 pub const LIBRARY_MANIFEST_PATH: &str = "library/sounds/manifest.json";
 pub const TRENDS_ACTOR_ID: &str = "alien_force~tiktok-trending-sounds-tracker";
-pub const MUSIC_POSTS_ACTOR_ID: &str = "powerai~tiktok-music-posts-video-scraper";
-pub const VIDEO_DOWNLOADER_ACTOR_ID: &str = "dltik~tiktok-video-downloader";
+pub const DEFAULT_SOUND_RESOLVER_REGION: &str = "US";
 
-const DOWNLOAD_OUTPUT_KEY: &str = "OUTPUT";
+const DIRECT_DOWNLOAD_METHOD: &str = "direct_http";
+const SOUND_RESOLVER_INPUT_TYPE: &str = "MUSIC";
+const SOUND_RESOLVER_INPUT_LIMIT: usize = 20;
 
 #[derive(Debug, Clone)]
 pub struct ImportTrendingSoundsOptions {
@@ -30,6 +31,7 @@ pub struct ImportTrendingSoundsOptions {
     pub period: String,
     pub max_posts: usize,
     pub download_attempts: usize,
+    pub resolver_actor_id: String,
     pub output_dir: PathBuf,
     pub manifest_path: PathBuf,
 }
@@ -72,13 +74,13 @@ pub struct TrendDiscoveryExecution {
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "snake_case")]
 enum CandidatePostSource {
-    MusicPostsActor,
-    TrendRelatedItem,
+    SoundResolverActor,
 }
 
 #[derive(Debug, Clone, Serialize)]
 struct CandidatePost {
     selection_rank: usize,
+    resolver_index: usize,
     source: CandidatePostSource,
     video_id: String,
     aweme_id: Option<String>,
@@ -92,6 +94,10 @@ struct CandidatePost {
     digg_count: Option<u64>,
     comment_count: Option<u64>,
     share_count: Option<u64>,
+    download_url: Option<String>,
+    public_media_url: Option<String>,
+    audio_url: Option<String>,
+    cover_url: Option<String>,
 }
 
 #[derive(Debug, Serialize)]
@@ -102,45 +108,28 @@ struct TrendArtifact {
 }
 
 #[derive(Debug, Serialize)]
-struct MusicPostsArtifact {
+struct ResolverPostsArtifact {
     actor_id: String,
-    actor_run: Option<ActorRun>,
-    actor_error: Option<String>,
-    requested_music_id: String,
+    actor_run: ActorRun,
+    input_profile: Value,
+    requested_sound_url: String,
     requested_max_results: usize,
+    debug_related_items: Vec<RelatedItem>,
     raw_dataset: Vec<Value>,
 }
 
 #[derive(Debug, Serialize)]
 struct CandidateSelectionArtifact {
     actor_id: String,
-    actor_run: Option<ActorRun>,
-    actor_error: Option<String>,
-    requested_music_id: String,
+    actor_run: ActorRun,
+    requested_sound_url: String,
     requested_max_results: usize,
     raw_dataset_count: usize,
     normalized_candidate_count: usize,
-    fallback_related_item_count: usize,
+    debug_related_item_count: usize,
     ranking_strategy: String,
+    preferred_candidate: Option<CandidatePost>,
     candidates: Vec<CandidatePost>,
-}
-
-#[derive(Debug, Clone, Serialize)]
-struct DownloadedVideoMetadata {
-    normalized_url: Option<String>,
-    title: Option<String>,
-    author: Option<String>,
-    duration_seconds: Option<u32>,
-    thumbnail: Option<String>,
-    view_count: Option<u64>,
-    like_count: Option<u64>,
-    without_watermark_available: Option<bool>,
-    available_outputs: Vec<String>,
-    max_video_height: Option<u32>,
-    output_format: Option<String>,
-    file_name: Option<String>,
-    file_size_bytes: Option<u64>,
-    file_url: Option<String>,
 }
 
 #[derive(Debug, Serialize)]
@@ -150,18 +139,14 @@ struct DownloadAttemptArtifact {
     candidate_source: CandidatePostSource,
     candidate_video_id: String,
     candidate_video_url: String,
-    actor_id: String,
-    actor_run: Option<ActorRun>,
-    raw_dataset_count: usize,
-    selected_dataset_item: Option<DownloadedVideoMetadata>,
-    resolved_file_url: Option<String>,
+    resolved_direct_video_url: Option<String>,
+    resolved_audio_url: Option<String>,
     error: Option<String>,
 }
 
 #[derive(Debug, Serialize)]
 struct DownloadArtifact {
-    actor_id: String,
-    request_defaults: Value,
+    method: String,
     attempts: Vec<DownloadAttemptArtifact>,
 }
 
@@ -186,8 +171,8 @@ struct ImportedSoundMetadata {
 #[derive(Debug, Serialize)]
 struct ActorChainMetadata {
     trends_actor: String,
-    music_posts_actor: String,
-    downloader_actor: String,
+    sound_resolver_actor: String,
+    download_method: String,
 }
 
 #[derive(Debug, Serialize)]
@@ -196,6 +181,8 @@ struct SelectionSummary {
     candidate_count: usize,
     selected_video_id: String,
     selected_video_url: String,
+    selected_direct_video_url: String,
+    selected_audio_url: Option<String>,
     selected_comment_count: Option<u64>,
     selected_share_count: Option<u64>,
     selected_like_count: Option<u64>,
@@ -259,16 +246,20 @@ struct ManifestEntry {
     representative_like_count: Option<u64>,
     #[serde(default)]
     representative_view_count: Option<u64>,
+    #[serde(default)]
+    resolver_actor_id: Option<String>,
+    #[serde(default)]
+    download_method: Option<String>,
 }
 
 struct CandidateSelectionResult {
-    music_posts_artifact: MusicPostsArtifact,
+    resolver_posts_artifact: ResolverPostsArtifact,
     selection_artifact: CandidateSelectionArtifact,
 }
 
 struct DownloadResolution {
     selected_candidate: CandidatePost,
-    selected_metadata: DownloadedVideoMetadata,
+    selected_media_url: String,
     attempts: Vec<DownloadAttemptArtifact>,
     video_path: PathBuf,
     audio_path: PathBuf,
@@ -365,7 +356,6 @@ pub fn import_trending_sounds(
         .items
         .iter()
         .cloned()
-        .into_iter()
         .take(options.limit)
         .collect::<Vec<_>>();
 
@@ -450,11 +440,17 @@ fn import_trending_sound_item(
         },
     )?;
 
-    let candidates = collect_candidate_posts(client, token, &item, options.max_posts)?;
-    write_json(&posts_path, &candidates.music_posts_artifact)?;
+    let candidates = collect_candidate_posts(
+        client,
+        token,
+        &options.resolver_actor_id,
+        &item,
+        options.max_posts,
+    )?;
+    write_json(&posts_path, &candidates.resolver_posts_artifact)?;
     write_json(&selection_path, &candidates.selection_artifact)?;
 
-    let download = download_best_candidate_video(
+    let download = download_best_candidate_media(
         client,
         token,
         &sound_dir,
@@ -464,12 +460,7 @@ fn import_trending_sound_item(
     write_json(
         &download_path,
         &DownloadArtifact {
-            actor_id: VIDEO_DOWNLOADER_ACTOR_ID.to_string(),
-            request_defaults: json!({
-                "output": "mp4",
-                "watermarkPolicy": "standard",
-                "metadataOnly": false,
-            }),
+            method: DIRECT_DOWNLOAD_METHOD.to_string(),
             attempts: download.attempts,
         },
     )?;
@@ -478,7 +469,7 @@ fn import_trending_sound_item(
         "For research and internal prototyping only. Verify rights before redistribution or production use."
             .to_string();
     let provenance =
-        "Imported from Apify trending sounds, resolved to music posts, ranked by comments, downloaded with dltik, and audio extracted locally with ffmpeg."
+        "Imported from Apify trending sounds, resolved from the sound URL with a Novi actor, selected by top like count, downloaded directly from resolver media output, and audio extracted locally with ffmpeg."
             .to_string();
 
     let metadata = ImportedSoundMetadata {
@@ -490,18 +481,22 @@ fn import_trending_sound_item(
         clip_id: item.clip_id.clone(),
         song_id: item.song_id.clone(),
         country_code: item.country_code.clone(),
-        duration_seconds: item.duration,
+        duration_seconds: download
+            .selected_candidate
+            .duration_seconds
+            .unwrap_or(item.duration),
         actors: ActorChainMetadata {
             trends_actor: TRENDS_ACTOR_ID.to_string(),
-            music_posts_actor: MUSIC_POSTS_ACTOR_ID.to_string(),
-            downloader_actor: VIDEO_DOWNLOADER_ACTOR_ID.to_string(),
+            sound_resolver_actor: options.resolver_actor_id.clone(),
+            download_method: DIRECT_DOWNLOAD_METHOD.to_string(),
         },
         selection: SelectionSummary {
-            ranking_strategy:
-                "comment_count desc, share_count desc, digg_count desc, play_count desc".to_string(),
+            ranking_strategy: candidates.selection_artifact.ranking_strategy.clone(),
             candidate_count: candidates.selection_artifact.candidates.len(),
             selected_video_id: download.selected_candidate.video_id.clone(),
             selected_video_url: download.selected_candidate.video_url.clone(),
+            selected_direct_video_url: download.selected_media_url.clone(),
+            selected_audio_url: download.selected_candidate.audio_url.clone(),
             selected_comment_count: download.selected_candidate.comment_count,
             selected_share_count: download.selected_candidate.share_count,
             selected_like_count: download.selected_candidate.digg_count,
@@ -531,7 +526,7 @@ fn import_trending_sound_item(
             source_url: item.link.clone(),
             source_video_url: Some(download.selected_candidate.video_url.clone()),
             duration_seconds: download
-                .selected_metadata
+                .selected_candidate
                 .duration_seconds
                 .or(Some(item.duration)),
             local_audio_path: download.audio_path.display().to_string(),
@@ -551,6 +546,8 @@ fn import_trending_sound_item(
             representative_share_count: download.selected_candidate.share_count,
             representative_like_count: download.selected_candidate.digg_count,
             representative_view_count: download.selected_candidate.play_count,
+            resolver_actor_id: Some(options.resolver_actor_id.clone()),
+            download_method: Some(DIRECT_DOWNLOAD_METHOD.to_string()),
         },
         report: ImportedSound {
             id: sound_id,
@@ -562,9 +559,11 @@ fn import_trending_sound_item(
             trend_link: item.link,
             selected_video_url: download.selected_candidate.video_url,
             selected_video_id: Some(download.selected_candidate.video_id),
+            selected_like_count: download.selected_candidate.digg_count,
             selected_comment_count: download.selected_candidate.comment_count,
             candidate_posts_considered: candidates.selection_artifact.candidates.len(),
-            downloader_actor: VIDEO_DOWNLOADER_ACTOR_ID.to_string(),
+            resolver_actor: options.resolver_actor_id.clone(),
+            download_method: DIRECT_DOWNLOAD_METHOD.to_string(),
             local_video_path: download.video_path.display().to_string(),
             local_audio_path: download.audio_path.display().to_string(),
             local_metadata_path: metadata_path.display().to_string(),
@@ -575,88 +574,79 @@ fn import_trending_sound_item(
 fn collect_candidate_posts(
     client: &Client,
     token: &str,
+    resolver_actor_id: &str,
     item: &TrendingSoundItem,
     max_posts: usize,
 ) -> Result<CandidateSelectionResult> {
-    let mut actor_run = None;
-    let mut actor_error = None;
-    let mut raw_dataset = Vec::new();
+    let input_profile = json!({
+        "type": SOUND_RESOLVER_INPUT_TYPE,
+        "url": item.link,
+        "region": DEFAULT_SOUND_RESOLVER_REGION,
+        "limit": SOUND_RESOLVER_INPUT_LIMIT,
+        "isUnlimited": false,
+        "publishTime": "MONTH",
+        "sortType": 1,
+        "isDownloadVideo": false,
+        "isDownloadVideoCover": false
+    });
 
-    match apify::run_actor(
-        client,
-        token,
-        MUSIC_POSTS_ACTOR_ID,
-        &json!({
-            "music_id": item.song_id,
-            "maxResults": max_posts,
-        }),
-    ) {
-        Ok(run) => {
-            raw_dataset = apify::fetch_dataset_values(client, token, &run.default_dataset_id)
-                .with_context(|| {
-                    format!(
-                        "failed to fetch music posts dataset for sound {}",
-                        item.song_id
-                    )
-                })?;
-            actor_run = Some(run);
-        }
-        Err(error) => {
-            actor_error = Some(format!("{error:#}"));
-        }
-    }
+    let actor_run = apify::run_actor(client, token, resolver_actor_id, &input_profile)?;
+    let raw_dataset = apify::fetch_dataset_values(client, token, &actor_run.default_dataset_id)
+        .with_context(|| {
+            format!(
+                "failed to fetch sound resolver dataset for sound URL {}",
+                item.link
+            )
+        })?;
 
     let mut seen = BTreeSet::new();
     let mut candidates = raw_dataset
         .iter()
-        .filter_map(normalize_music_post_item)
+        .enumerate()
+        .filter_map(|(index, row)| normalize_resolver_post_item(row, index))
         .filter(|candidate| seen.insert(candidate_key(candidate)))
         .collect::<Vec<_>>();
+    let raw_dataset_count = raw_dataset.len();
     let normalized_candidate_count = candidates.len();
-
-    let fallback_candidates = fallback_related_item_candidates(item)
-        .into_iter()
-        .filter(|candidate| seen.insert(candidate_key(candidate)))
-        .collect::<Vec<_>>();
-    let fallback_related_item_count = fallback_candidates.len();
-    candidates.extend(fallback_candidates);
 
     if candidates.is_empty() {
         bail!(
-            "music posts actor returned no usable candidates and trending sound {} had no related_items fallback",
-            item.song_id
+            "resolver actor {} returned no usable candidates for sound {}",
+            resolver_actor_id,
+            item.link
         )
     }
 
     rank_candidate_posts(&mut candidates);
-    let raw_dataset_count = raw_dataset.len();
+    candidates.truncate(max_posts.min(SOUND_RESOLVER_INPUT_LIMIT));
+    let preferred_candidate = candidates.first().cloned();
 
     Ok(CandidateSelectionResult {
-        music_posts_artifact: MusicPostsArtifact {
-            actor_id: MUSIC_POSTS_ACTOR_ID.to_string(),
+        resolver_posts_artifact: ResolverPostsArtifact {
+            actor_id: resolver_actor_id.to_string(),
             actor_run: actor_run.clone(),
-            actor_error: actor_error.clone(),
-            requested_music_id: item.song_id.clone(),
-            requested_max_results: max_posts,
+            input_profile,
+            requested_sound_url: item.link.clone(),
+            requested_max_results: SOUND_RESOLVER_INPUT_LIMIT,
+            debug_related_items: item.related_items.clone(),
             raw_dataset,
         },
         selection_artifact: CandidateSelectionArtifact {
-            actor_id: MUSIC_POSTS_ACTOR_ID.to_string(),
+            actor_id: resolver_actor_id.to_string(),
             actor_run,
-            actor_error,
-            requested_music_id: item.song_id.clone(),
-            requested_max_results: max_posts,
+            requested_sound_url: item.link.clone(),
+            requested_max_results: max_posts.min(SOUND_RESOLVER_INPUT_LIMIT),
             raw_dataset_count,
             normalized_candidate_count,
-            fallback_related_item_count,
-            ranking_strategy:
-                "comment_count desc, share_count desc, digg_count desc, play_count desc".to_string(),
+            debug_related_item_count: item.related_items.len(),
+            ranking_strategy: "digg_count desc, resolver order asc".to_string(),
+            preferred_candidate,
             candidates,
         },
     })
 }
 
-fn download_best_candidate_video(
+fn download_best_candidate_media(
     client: &Client,
     token: &str,
     sound_dir: &Path,
@@ -665,16 +655,17 @@ fn download_best_candidate_video(
 ) -> Result<DownloadResolution> {
     let max_attempts = download_attempts.max(1).min(candidates.len());
     let mut attempts = Vec::new();
+    let mut last_error = None;
 
     for (index, candidate) in candidates.iter().take(max_attempts).enumerate() {
         let attempt_number = index + 1;
-        match download_candidate_video(client, token, sound_dir, candidate, attempt_number) {
-            Ok((selected_metadata, video_path, audio_path, mut artifact)) => {
-                artifact.error = None;
+
+        match download_candidate_media(client, token, sound_dir, candidate, attempt_number) {
+            Ok((selected_media_url, video_path, audio_path, artifact)) => {
                 attempts.push(artifact);
                 return Ok(DownloadResolution {
                     selected_candidate: candidate.clone(),
-                    selected_metadata,
+                    selected_media_url,
                     attempts,
                     video_path,
                     audio_path,
@@ -682,29 +673,22 @@ fn download_best_candidate_video(
             }
             Err((artifact, error)) => {
                 attempts.push(artifact);
-                if attempt_number == max_attempts {
-                    return Err(error);
-                }
+                last_error = Some(error);
             }
         }
     }
 
-    bail!("no download attempts were made")
+    Err(last_error.unwrap_or_else(|| anyhow!("no download attempts were made")))
 }
 
-fn download_candidate_video(
+fn download_candidate_media(
     client: &Client,
     token: &str,
     sound_dir: &Path,
     candidate: &CandidatePost,
     attempt_number: usize,
 ) -> std::result::Result<
-    (
-        DownloadedVideoMetadata,
-        PathBuf,
-        PathBuf,
-        DownloadAttemptArtifact,
-    ),
+    (String, PathBuf, PathBuf, DownloadAttemptArtifact),
     (DownloadAttemptArtifact, anyhow::Error),
 > {
     let mut artifact = DownloadAttemptArtifact {
@@ -713,86 +697,31 @@ fn download_candidate_video(
         candidate_source: candidate.source.clone(),
         candidate_video_id: candidate.video_id.clone(),
         candidate_video_url: candidate.video_url.clone(),
-        actor_id: VIDEO_DOWNLOADER_ACTOR_ID.to_string(),
-        actor_run: None,
-        raw_dataset_count: 0,
-        selected_dataset_item: None,
-        resolved_file_url: None,
+        resolved_direct_video_url: None,
+        resolved_audio_url: candidate.audio_url.clone(),
         error: None,
     };
 
-    let run = match apify::run_actor(
-        client,
-        token,
-        VIDEO_DOWNLOADER_ACTOR_ID,
-        &json!({
-            "url": candidate.video_url,
-            "output": "mp4",
-            "watermarkPolicy": "standard",
-            "metadataOnly": false,
-        }),
-    ) {
-        Ok(run) => run,
-        Err(error) => {
-            artifact.error = Some(format!("{error:#}"));
-            return Err((artifact, error));
-        }
-    };
-    artifact.actor_run = Some(run.clone());
-
-    let raw_dataset = match apify::fetch_dataset_values(client, token, &run.default_dataset_id) {
-        Ok(items) => items,
-        Err(error) => {
-            artifact.error = Some(format!("{error:#}"));
-            return Err((artifact, error));
-        }
-    };
-    artifact.raw_dataset_count = raw_dataset.len();
-
-    let metadata = raw_dataset
-        .iter()
-        .filter_map(normalize_downloaded_video_item)
-        .next()
-        .unwrap_or_else(|| DownloadedVideoMetadata {
-            normalized_url: Some(candidate.video_url.clone()),
-            title: candidate.title.clone(),
-            author: candidate.author_unique_id.clone(),
-            duration_seconds: candidate.duration_seconds,
-            thumbnail: None,
-            view_count: candidate.play_count,
-            like_count: candidate.digg_count,
-            without_watermark_available: None,
-            available_outputs: vec!["mp4".to_string()],
-            max_video_height: None,
-            output_format: Some("mp4".to_string()),
-            file_name: None,
-            file_size_bytes: None,
-            file_url: None,
-        });
-    artifact.selected_dataset_item = Some(metadata.clone());
-
-    let file_url = metadata.file_url.clone().or_else(|| {
-        run.default_key_value_store_id
-            .as_deref()
-            .map(|store_id| apify::key_value_store_record_url(store_id, DOWNLOAD_OUTPUT_KEY))
-    });
-
-    let Some(file_url) = file_url else {
-        let error = anyhow::anyhow!(
-            "downloader actor returned no fileUrl and no default key-value store id for {}",
+    let Some(media_url) = candidate
+        .download_url
+        .clone()
+        .or_else(|| candidate.public_media_url.clone())
+    else {
+        let error = anyhow!(
+            "candidate {} did not expose a downloadable or public media URL",
             candidate.video_url
         );
-        artifact.error = Some(format!("{error:#}"));
+        artifact.error = Some(error.to_string());
         return Err((artifact, error));
     };
-    artifact.resolved_file_url = Some(file_url.clone());
+    artifact.resolved_direct_video_url = Some(media_url.clone());
 
     let temp_video = sound_dir.join(format!("video-attempt-{attempt_number}.mp4"));
     let temp_audio = sound_dir.join(format!("audio-attempt-{attempt_number}.mp3"));
     let final_video = sound_dir.join("video.mp4");
     let final_audio = sound_dir.join("audio.mp3");
 
-    if let Err(error) = apify::download_to_path(client, token, &file_url, &temp_video) {
+    if let Err(error) = apify::download_to_path(client, token, &media_url, &temp_video) {
         let _ = fs::remove_file(&temp_video);
         artifact.error = Some(format!("{error:#}"));
         return Err((artifact, error));
@@ -818,7 +747,7 @@ fn download_candidate_video(
         return Err((artifact, error));
     }
 
-    Ok((metadata, final_video, final_audio, artifact))
+    Ok((media_url, final_video, final_audio, artifact))
 }
 
 fn extract_audio_from_video(video_path: &Path, audio_path: &Path) -> Result<()> {
@@ -860,8 +789,19 @@ fn promote_temp_file(from: &Path, to: &Path) -> Result<()> {
         .with_context(|| format!("failed to rename {} to {}", from.display(), to.display()))
 }
 
-fn normalize_music_post_item(item: &Value) -> Option<CandidatePost> {
-    let aweme_id = first_non_empty_string(item, &[&["aweme_id"], &["awemeId"]]);
+fn normalize_resolver_post_item(item: &Value, resolver_index: usize) -> Option<CandidatePost> {
+    let aweme_id = first_non_empty_string(
+        item,
+        &[
+            &["aweme_id"],
+            &["awemeId"],
+            &["video_id"],
+            &["videoId"],
+            &["item_id"],
+            &["itemId"],
+            &["id"],
+        ],
+    );
     let author_unique_id = first_non_empty_string(
         item,
         &[
@@ -871,59 +811,73 @@ fn normalize_music_post_item(item: &Value) -> Option<CandidatePost> {
         ],
     )
     .map(normalize_author_unique_id);
-    let video_id = first_non_empty_string(
-        item,
-        &[&["video_id"], &["videoId"], &["video", "id"], &["id"]],
-    )
-    .or_else(|| {
-        first_non_empty_string(
-            item,
-            &[
-                &["share_url"],
-                &["shareUrl"],
-                &["url"],
-                &["video_url"],
-                &["videoUrl"],
-            ],
-        )
-        .and_then(|url| tiktok_video_id(&url).map(ToString::to_string))
-    })?;
-
-    let canonical_url = canonical_video_url(author_unique_id.as_deref(), &video_id);
-    let video_url = first_non_empty_string(
+    let share_url = first_non_empty_string(
         item,
         &[
             &["share_url"],
             &["shareUrl"],
             &["share_info", "share_url"],
             &["shareInfo", "shareUrl"],
+            &["web_video_url"],
+            &["webVideoUrl"],
+            &["post_url"],
+            &["postUrl"],
             &["url"],
         ],
     )
-    .filter(|url| is_tiktok_url(url))
-    .unwrap_or(canonical_url);
+    .filter(|url| is_tiktok_url(url));
+    let video_id = aweme_id.clone().or_else(|| {
+        share_url
+            .as_deref()
+            .and_then(tiktok_video_id)
+            .map(ToString::to_string)
+    })?;
+    let canonical_url = canonical_video_url(author_unique_id.as_deref(), &video_id);
+    let video_url = share_url.unwrap_or(canonical_url);
 
     Some(CandidatePost {
         selection_rank: 0,
-        source: CandidatePostSource::MusicPostsActor,
+        resolver_index,
+        source: CandidatePostSource::SoundResolverActor,
         video_id,
         aweme_id,
         video_url,
-        author_unique_id: author_unique_id.clone(),
+        author_unique_id,
         author_nickname: first_non_empty_string(
             item,
             &[&["author", "nickname"], &["authorNickname"], &["nickname"]],
         ),
         title: first_non_empty_string(item, &[&["title"], &["desc"]]),
         region: first_non_empty_string(item, &[&["region"]]),
-        duration_seconds: first_u32(item, &[&["duration"], &["video", "duration"]]),
+        duration_seconds: first_duration_seconds(
+            item,
+            &[
+                &["duration"],
+                &["video", "duration"],
+                &["video", "durationMs"],
+                &["video", "duration_ms"],
+            ],
+        ),
         play_count: first_u64(
             item,
-            &[&["play_count"], &["playCount"], &["stats", "play_count"]],
+            &[
+                &["play_count"],
+                &["playCount"],
+                &["stats", "play_count"],
+                &["stats", "playCount"],
+            ],
         ),
         digg_count: first_u64(
             item,
-            &[&["digg_count"], &["diggCount"], &["stats", "digg_count"]],
+            &[
+                &["digg_count"],
+                &["diggCount"],
+                &["like_count"],
+                &["likeCount"],
+                &["stats", "digg_count"],
+                &["stats", "diggCount"],
+                &["stats", "likeCount"],
+            ],
         ),
         comment_count: first_u64(
             item,
@@ -931,99 +885,91 @@ fn normalize_music_post_item(item: &Value) -> Option<CandidatePost> {
                 &["comment_count"],
                 &["commentCount"],
                 &["stats", "comment_count"],
+                &["stats", "commentCount"],
             ],
         ),
         share_count: first_u64(
             item,
-            &[&["share_count"], &["shareCount"], &["stats", "share_count"]],
+            &[
+                &["share_count"],
+                &["shareCount"],
+                &["stats", "share_count"],
+                &["stats", "shareCount"],
+            ],
+        ),
+        download_url: first_non_empty_string(
+            item,
+            &[
+                &["video", "downloadAddr"],
+                &["video", "download_addr"],
+                &["video", "downloadUrl"],
+                &["video", "download_url"],
+                &["video", "downloadAddr", "urlList", "*"],
+                &["video", "downloadAddr", "url_list", "*"],
+                &["video", "download_addr", "urlList", "*"],
+                &["video", "download_addr", "url_list", "*"],
+                &["downloadUrl"],
+                &["download_url"],
+                &["videoDownloadUrl"],
+                &["video_download_url"],
+            ],
+        ),
+        public_media_url: first_non_empty_string(
+            item,
+            &[
+                &["video", "playAddr"],
+                &["video", "play_addr"],
+                &["video", "playUrl"],
+                &["video", "play_url"],
+                &["video", "playAddr", "urlList", "*"],
+                &["video", "playAddr", "url_list", "*"],
+                &["video", "play_addr", "urlList", "*"],
+                &["video", "play_addr", "url_list", "*"],
+                &["video", "bitrateInfo", "*", "playAddr", "urlList", "*"],
+                &["video", "bitrate_info", "*", "play_addr", "url_list", "*"],
+                &["playUrl"],
+                &["play_url"],
+                &["videoUrl"],
+                &["video_url"],
+            ],
+        ),
+        audio_url: first_non_empty_string(
+            item,
+            &[
+                &["music", "playUrl"],
+                &["music", "play_url"],
+                &["music", "playUrl", "urlList", "*"],
+                &["music", "play_url", "url_list", "*"],
+                &["music", "audioUrl"],
+                &["music", "audio_url"],
+                &["audioUrl"],
+                &["audio_url"],
+            ],
+        ),
+        cover_url: first_non_empty_string(
+            item,
+            &[
+                &["video", "cover"],
+                &["video", "cover", "urlList", "*"],
+                &["video", "cover", "url_list", "*"],
+                &["cover"],
+                &["coverUrl"],
+                &["cover_url"],
+            ],
         ),
     })
 }
 
-fn fallback_related_item_candidates(item: &TrendingSoundItem) -> Vec<CandidatePost> {
-    item.related_items
-        .iter()
-        .map(|related| {
-            let video_id = related.item_id.to_string();
-            CandidatePost {
-                selection_rank: 0,
-                source: CandidatePostSource::TrendRelatedItem,
-                video_id: video_id.clone(),
-                aweme_id: None,
-                video_url: canonical_video_url(None, &video_id),
-                author_unique_id: None,
-                author_nickname: None,
-                title: Some(item.title.clone()),
-                region: Some(item.country_code.clone()),
-                duration_seconds: Some(item.duration),
-                play_count: None,
-                digg_count: None,
-                comment_count: None,
-                share_count: None,
-            }
-        })
-        .collect()
-}
-
 fn rank_candidate_posts(candidates: &mut [CandidatePost]) {
     candidates.sort_by(|left, right| {
-        sort_metric(right.comment_count)
-            .cmp(&sort_metric(left.comment_count))
-            .then_with(|| {
-                sort_metric(right.share_count)
-                    .cmp(&sort_metric(left.share_count))
-                    .then_with(|| {
-                        sort_metric(right.digg_count)
-                            .cmp(&sort_metric(left.digg_count))
-                            .then_with(|| {
-                                sort_metric(right.play_count).cmp(&sort_metric(left.play_count))
-                            })
-                    })
-            })
+        sort_metric(right.digg_count)
+            .cmp(&sort_metric(left.digg_count))
+            .then_with(|| left.resolver_index.cmp(&right.resolver_index))
     });
 
     for (index, candidate) in candidates.iter_mut().enumerate() {
         candidate.selection_rank = index + 1;
     }
-}
-
-fn normalize_downloaded_video_item(item: &Value) -> Option<DownloadedVideoMetadata> {
-    let file_url = first_non_empty_string(
-        item,
-        &[
-            &["fileUrl"],
-            &["file_url"],
-            &["downloadUrl"],
-            &["download_url"],
-        ],
-    );
-
-    Some(DownloadedVideoMetadata {
-        normalized_url: first_non_empty_string(
-            item,
-            &[&["normalizedUrl"], &["normalized_url"], &["url"]],
-        ),
-        title: first_non_empty_string(item, &[&["title"]]),
-        author: first_non_empty_string(item, &[&["author"]]),
-        duration_seconds: first_u32(item, &[&["duration"]]),
-        thumbnail: first_non_empty_string(item, &[&["thumbnail"]]),
-        view_count: first_u64(item, &[&["viewCount"], &["view_count"]]),
-        like_count: first_u64(item, &[&["likeCount"], &["like_count"]]),
-        without_watermark_available: first_bool(
-            item,
-            &[
-                &["withoutWatermarkAvailable"],
-                &["without_watermark_available"],
-            ],
-        ),
-        available_outputs: first_string_vec(item, &[&["availableOutputs"], &["available_outputs"]])
-            .unwrap_or_default(),
-        max_video_height: first_u32(item, &[&["maxVideoHeight"], &["max_video_height"]]),
-        output_format: first_non_empty_string(item, &[&["outputFormat"], &["output_format"]]),
-        file_name: first_non_empty_string(item, &[&["fileName"], &["file_name"]]),
-        file_size_bytes: first_u64(item, &[&["fileSizeBytes"], &["file_size_bytes"]]),
-        file_url,
-    })
 }
 
 fn read_manifest(path: &Path) -> Result<Manifest> {
@@ -1146,77 +1092,51 @@ fn first_u64(value: &Value, paths: &[&[&str]]) -> Option<u64> {
     paths.iter().find_map(|path| unsigned_at_path(value, path))
 }
 
-fn first_u32(value: &Value, paths: &[&[&str]]) -> Option<u32> {
-    first_u64(value, paths).and_then(|value| u32::try_from(value).ok())
-}
-
-fn first_bool(value: &Value, paths: &[&[&str]]) -> Option<bool> {
-    paths.iter().find_map(|path| bool_at_path(value, path))
-}
-
-fn first_string_vec(value: &Value, paths: &[&[&str]]) -> Option<Vec<String>> {
-    paths
-        .iter()
-        .find_map(|path| string_vec_at_path(value, path))
+fn first_duration_seconds(value: &Value, paths: &[&[&str]]) -> Option<u32> {
+    first_u64(value, paths).and_then(|raw| {
+        let seconds = if raw > 1_000 { raw / 1_000 } else { raw };
+        u32::try_from(seconds).ok()
+    })
 }
 
 fn string_at_path<'a>(value: &'a Value, path: &[&str]) -> Option<&'a str> {
-    let mut current = value;
-    for segment in path {
-        current = current.get(*segment)?;
-    }
-
-    current
-        .as_str()
-        .map(str::trim)
-        .filter(|value| !value.is_empty())
+    values_at_path(value, path)
+        .into_iter()
+        .find_map(|candidate| candidate.as_str().map(str::trim))
+        .filter(|candidate| !candidate.is_empty())
 }
 
 fn unsigned_at_path(value: &Value, path: &[&str]) -> Option<u64> {
-    let mut current = value;
-    for segment in path {
-        current = current.get(*segment)?;
-    }
-
-    match current {
-        Value::Number(number) => number.as_u64(),
-        Value::String(text) => text.trim().parse().ok(),
-        _ => None,
-    }
-}
-
-fn bool_at_path(value: &Value, path: &[&str]) -> Option<bool> {
-    let mut current = value;
-    for segment in path {
-        current = current.get(*segment)?;
-    }
-
-    match current {
-        Value::Bool(flag) => Some(*flag),
-        Value::String(text) => match text.trim() {
-            "true" => Some(true),
-            "false" => Some(false),
+    values_at_path(value, path)
+        .into_iter()
+        .find_map(|candidate| match candidate {
+            Value::Number(number) => number.as_u64(),
+            Value::String(text) => text.trim().parse().ok(),
             _ => None,
-        },
-        _ => None,
-    }
+        })
 }
 
-fn string_vec_at_path(value: &Value, path: &[&str]) -> Option<Vec<String>> {
-    let mut current = value;
-    for segment in path {
-        current = current.get(*segment)?;
+fn values_at_path<'a>(value: &'a Value, path: &[&str]) -> Vec<&'a Value> {
+    if path.is_empty() {
+        return vec![value];
     }
 
-    current.as_array().map(|items| {
-        items
-            .iter()
-            .filter_map(Value::as_str)
-            .map(str::trim)
-            .filter(|item| !item.is_empty())
-            .map(ToString::to_string)
-            .collect::<Vec<_>>()
-    })
+    let (segment, rest) = path.split_first().expect("non-empty path");
+
+    if *segment == "*" {
+        match value {
+            Value::Array(items) => items
+                .iter()
+                .flat_map(|item| values_at_path(item, rest))
+                .collect(),
+            _ => Vec::new(),
+        }
+    } else {
+        value
+            .get(*segment)
+            .map(|next| values_at_path(next, rest))
+            .unwrap_or_default()
+    }
 }
 
 #[cfg(test)]
@@ -1224,37 +1144,62 @@ mod tests {
     use super::*;
 
     #[test]
-    fn normalize_music_post_builds_canonical_video_url() {
+    fn normalize_resolver_post_builds_canonical_video_url_and_media_urls() {
         let item = json!({
-            "video_id": "7502551047378832671",
-            "comment_count": 5358,
-            "digg_count": 7611,
-            "share_count": 754,
-            "play_count": 1287045,
+            "aweme_id": "7502551047378832671",
+            "diggCount": 7611,
+            "commentCount": 5358,
             "author": {
-                "unique_id": "tiktok",
+                "uniqueId": "tiktok",
                 "nickname": "TikTok"
+            },
+            "video": {
+                "downloadAddr": {
+                    "urlList": ["https://cdn.example.com/video-download.mp4"]
+                },
+                "playAddr": {
+                    "urlList": ["https://cdn.example.com/video-play.mp4"]
+                },
+                "duration": 15
+            },
+            "music": {
+                "playUrl": {
+                    "urlList": ["https://cdn.example.com/audio.mp3"]
+                }
             },
             "title": "Example"
         });
 
-        let candidate = normalize_music_post_item(&item).expect("candidate");
+        let candidate = normalize_resolver_post_item(&item, 0).expect("candidate");
 
         assert_eq!(candidate.video_id, "7502551047378832671");
         assert_eq!(
             candidate.video_url,
             "https://www.tiktok.com/@tiktok/video/7502551047378832671"
         );
-        assert_eq!(candidate.comment_count, Some(5358));
+        assert_eq!(
+            candidate.download_url.as_deref(),
+            Some("https://cdn.example.com/video-download.mp4")
+        );
+        assert_eq!(
+            candidate.public_media_url.as_deref(),
+            Some("https://cdn.example.com/video-play.mp4")
+        );
+        assert_eq!(
+            candidate.audio_url.as_deref(),
+            Some("https://cdn.example.com/audio.mp3")
+        );
         assert_eq!(candidate.digg_count, Some(7611));
+        assert_eq!(candidate.comment_count, Some(5358));
     }
 
     #[test]
-    fn ranking_prefers_comments_before_other_metrics() {
+    fn ranking_prefers_like_count_before_resolver_order() {
         let mut candidates = vec![
             CandidatePost {
                 selection_rank: 0,
-                source: CandidatePostSource::MusicPostsActor,
+                resolver_index: 1,
+                source: CandidatePostSource::SoundResolverActor,
                 video_id: "1".to_string(),
                 aweme_id: None,
                 video_url: "https://www.tiktok.com/@a/video/1".to_string(),
@@ -1264,13 +1209,18 @@ mod tests {
                 region: None,
                 duration_seconds: None,
                 play_count: Some(1_000_000),
-                digg_count: Some(100_000),
-                comment_count: Some(10),
-                share_count: Some(1),
+                digg_count: Some(100),
+                comment_count: Some(1_000),
+                share_count: Some(50),
+                download_url: Some("https://cdn.example.com/1.mp4".to_string()),
+                public_media_url: None,
+                audio_url: None,
+                cover_url: None,
             },
             CandidatePost {
                 selection_rank: 0,
-                source: CandidatePostSource::MusicPostsActor,
+                resolver_index: 0,
+                source: CandidatePostSource::SoundResolverActor,
                 video_id: "2".to_string(),
                 aweme_id: None,
                 video_url: "https://www.tiktok.com/@b/video/2".to_string(),
@@ -1280,9 +1230,13 @@ mod tests {
                 region: None,
                 duration_seconds: None,
                 play_count: Some(100),
-                digg_count: Some(100),
-                comment_count: Some(11),
+                digg_count: Some(101),
+                comment_count: Some(0),
                 share_count: Some(0),
+                download_url: Some("https://cdn.example.com/2.mp4".to_string()),
+                public_media_url: None,
+                audio_url: None,
+                cover_url: None,
             },
         ];
 
@@ -1294,56 +1248,31 @@ mod tests {
     }
 
     #[test]
-    fn normalize_downloaded_video_supports_dltik_shape() {
+    fn normalize_resolver_post_supports_wildcard_url_lists() {
         let item = json!({
-            "normalizedUrl": "https://www.tiktok.com/@username/video/7234071025832989994",
-            "title": "Best cooking hack ever",
-            "author": "username",
-            "duration": 15,
-            "viewCount": 1250000,
-            "likeCount": 89000,
-            "withoutWatermarkAvailable": true,
-            "availableOutputs": ["mp4", "mp3"],
-            "outputFormat": "mp4",
-            "fileName": "best-cooking-hack-ever.mp4",
-            "fileSizeBytes": 2456789,
-            "fileUrl": "https://api.apify.com/v2/key-value-stores/store/records/OUTPUT"
+            "id": "7234071025832989994",
+            "shareUrl": "https://www.tiktok.com/@username/video/7234071025832989994",
+            "stats": {
+                "diggCount": "89000"
+            },
+            "video": {
+                "bitrateInfo": [
+                    {
+                        "playAddr": {
+                            "urlList": ["https://cdn.example.com/bitrate.mp4"]
+                        }
+                    }
+                ]
+            }
         });
 
-        let normalized = normalize_downloaded_video_item(&item).expect("normalized");
+        let candidate = normalize_resolver_post_item(&item, 0).expect("normalized");
 
+        assert_eq!(candidate.video_id, "7234071025832989994");
+        assert_eq!(candidate.digg_count, Some(89_000));
         assert_eq!(
-            normalized.normalized_url.as_deref(),
-            Some("https://www.tiktok.com/@username/video/7234071025832989994")
-        );
-        assert_eq!(normalized.available_outputs, vec!["mp4", "mp3"]);
-        assert_eq!(normalized.file_size_bytes, Some(2_456_789));
-    }
-
-    #[test]
-    fn fallback_related_items_construct_candidate_urls() {
-        let item = TrendingSoundItem {
-            rank: 1,
-            title: "Example".to_string(),
-            author: "creator".to_string(),
-            link: "https://www.tiktok.com/music/example-sound-123".to_string(),
-            clip_id: "123".to_string(),
-            song_id: "456".to_string(),
-            duration: 12,
-            country_code: "US".to_string(),
-            related_items: vec![RelatedItem {
-                item_id: 42,
-                cover_url: None,
-            }],
-        };
-
-        let candidates = fallback_related_item_candidates(&item);
-
-        assert_eq!(candidates.len(), 1);
-        assert_eq!(candidates[0].video_id, "42");
-        assert_eq!(
-            candidates[0].video_url,
-            "https://www.tiktok.com/@i/video/42"
+            candidate.public_media_url.as_deref(),
+            Some("https://cdn.example.com/bitrate.mp4")
         );
     }
 }

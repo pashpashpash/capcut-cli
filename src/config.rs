@@ -4,6 +4,7 @@ use anyhow::{Context, Result, anyhow, bail};
 use serde::{Deserialize, Serialize};
 
 pub const APIFY_CONFIG_ENV: &str = "CAPCUT_CLI_APIFY_TOKEN";
+pub const TIKTOK_SOUND_RESOLVER_ACTOR_ID_ENV: &str = "CAPCUT_CLI_TIKTOK_SOUND_RESOLVER_ACTOR_ID";
 
 const APP_DIR_NAME: &str = "capcut-cli";
 const CONFIG_FILE_NAME: &str = "config.json";
@@ -106,6 +107,27 @@ pub fn apify_auth_status() -> Result<AuthStatus> {
         token_present,
         configured_via: token_present.then_some(AuthSource::ConfigFile),
     })
+}
+
+pub fn load_tiktok_sound_resolver_actor_id(explicit: Option<String>) -> Result<String> {
+    if let Some(value) = explicit {
+        let trimmed = value.trim();
+        if !trimmed.is_empty() {
+            return Ok(trimmed.to_string());
+        }
+    }
+
+    if let Ok(value) = env::var(TIKTOK_SOUND_RESOLVER_ACTOR_ID_ENV) {
+        let trimmed = value.trim();
+        if !trimmed.is_empty() {
+            return Ok(trimmed.to_string());
+        }
+    }
+
+    bail!(
+        "missing TikTok sound resolver actor id. Pass `--resolver-actor-id <actor>` or set {}",
+        TIKTOK_SOUND_RESOLVER_ACTOR_ID_ENV
+    )
 }
 
 fn read_config() -> Result<ConfigFile> {

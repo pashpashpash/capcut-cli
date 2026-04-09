@@ -15,6 +15,16 @@ This directory holds committed sound metadata plus imported TikTok trend assets.
 - `imported/` — per-sound directories created by the TikTok Apify importer
 - `samples/` — committed seed assets for repo scaffolding
 
+Each imported sound directory should include:
+
+- `trend.json` — raw trending sound record plus trend actor run metadata
+- `posts.json` — raw Novi resolver dataset plus the exact resolver input profile
+- `selection.json` — normalized candidate posts ranked by like count
+- `download.json` — direct-media download attempts and the winning media URL
+- `metadata.json` — final imported sound summary, provenance, rights note, and local file paths
+- `video.mp4`
+- `audio.mp3`
+
 ## Metadata expectations
 
 Each sound entry should track:
@@ -33,3 +43,4 @@ Each sound entry should track:
 - acquisition method / provenance
 - rights/provenance note
 - representative engagement metrics when present
+- resolver actor id and download method when present

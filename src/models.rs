@@ -116,9 +116,12 @@ pub struct ImportedSound {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub selected_video_id: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    pub selected_like_count: Option<u64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub selected_comment_count: Option<u64>,
     pub candidate_posts_considered: usize,
-    pub downloader_actor: String,
+    pub resolver_actor: String,
+    pub download_method: String,
     pub local_video_path: String,
     pub local_audio_path: String,
     pub local_metadata_path: String,

@@ -73,10 +73,6 @@ pub fn fetch_dataset_values(client: &Client, token: &str, dataset_id: &str) -> R
     fetch_dataset_items(client, token, dataset_id)
 }
 
-pub fn key_value_store_record_url(store_id: &str, key: &str) -> String {
-    format!("{API_BASE}/key-value-stores/{store_id}/records/{key}")
-}
-
 pub fn download_to_path(client: &Client, token: &str, url: &str, path: &Path) -> Result<()> {
     let request = if url.starts_with(API_BASE) {
         client.get(url).bearer_auth(token)

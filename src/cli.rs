@@ -5,14 +5,14 @@ use clap::{Args, Parser, Subcommand, ValueEnum};
 
 use crate::{
     apify,
-    config::{self, APIFY_CONFIG_ENV},
+    config::{self, APIFY_CONFIG_ENV, TIKTOK_SOUND_RESOLVER_ACTOR_ID_ENV},
     models::{
         AppReport, AuthReport, DiscoverSource, DiscoveryReport, LibraryReport, MediaReport,
         PipelineStep, PipelineStepKind, SoundImportReport,
     },
     tiktok::{
         self, DEFAULT_IMPORT_OUTPUT_DIR, ImportTrendingSoundsOptions, LIBRARY_MANIFEST_PATH,
-        MUSIC_POSTS_ACTOR_ID, TRENDS_ACTOR_ID, VIDEO_DOWNLOADER_ACTOR_ID,
+        TRENDS_ACTOR_ID,
     },
 };
 
@@ -156,11 +156,15 @@ impl DiscoverArgs {
                         .collect(),
                     notes: vec![
                         format!("Uses Apify actor `{TRENDS_ACTOR_ID}` for live trend discovery"),
-                        "Each result includes sound identifiers plus the count of trend-related fallback items".to_string(),
+                        "Each result includes sound identifiers plus trend-related item counts kept only as debug metadata".to_string(),
                     ],
                     next_steps: vec![
-                        "Use `capcut-cli library sound import-tiktok-trending --limit <n>` to ingest video and audio assets".to_string(),
-                        "If a sound has no music-post results, the importer falls back to trend-related item ids".to_string(),
+                        format!(
+                            "Use `capcut-cli library sound import-tiktok-trending --resolver-actor-id <novi-actor> --limit <n>` to ingest video and audio assets"
+                        ),
+                        format!(
+                            "Or set `{TIKTOK_SOUND_RESOLVER_ACTOR_ID_ENV}` once for agent-friendly imports"
+                        ),
                     ],
                 }
             }
@@ -304,11 +308,14 @@ struct ImportTiktokTrendingArgs {
     #[arg(long, default_value = "7")]
     period: String,
 
-    #[arg(long, default_value_t = 30)]
+    #[arg(long, default_value_t = 20)]
     max_posts: usize,
 
     #[arg(long, default_value_t = 5)]
     download_attempts: usize,
+
+    #[arg(long)]
+    resolver_actor_id: Option<String>,
 
     #[arg(long)]
     output_dir: Option<PathBuf>,
@@ -327,6 +334,8 @@ impl ImportTiktokTrendingArgs {
         }
 
         let token = config::load_apify_token()?;
+        let resolver_actor_id =
+            config::load_tiktok_sound_resolver_actor_id(self.resolver_actor_id)?;
         let client = apify::build_client()?;
         let output_dir = self
             .output_dir
@@ -340,6 +349,7 @@ impl ImportTiktokTrendingArgs {
                 period: self.period,
                 max_posts: self.max_posts,
                 download_attempts: self.download_attempts,
+                resolver_actor_id: resolver_actor_id.clone(),
                 output_dir: output_dir.clone(),
                 manifest_path: PathBuf::from(LIBRARY_MANIFEST_PATH),
             },
@@ -347,11 +357,7 @@ impl ImportTiktokTrendingArgs {
 
         Ok(AppReport::SoundImport(SoundImportReport {
             provider: "apify".to_string(),
-            actor_chain: vec![
-                TRENDS_ACTOR_ID.to_string(),
-                MUSIC_POSTS_ACTOR_ID.to_string(),
-                VIDEO_DOWNLOADER_ACTOR_ID.to_string(),
-            ],
+            actor_chain: vec![TRENDS_ACTOR_ID.to_string(), resolver_actor_id],
             attempted_count: result.imported.len() + result.failed.len(),
             imported_count: result.imported.len(),
             failed_count: result.failed.len(),

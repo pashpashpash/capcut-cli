@@ -36,31 +36,65 @@ Use the live discovery command when you only need trending sound ids and metadat
 cargo run -- discover tiktok-sounds --country "United States" --period 7 --limit 5
 ```
 
-This uses `alien_force~tiktok-trending-sounds-tracker` and returns JSON with `song_id`, `clip_id`, and fallback `related_items` counts.
+This uses `alien_force~tiktok-trending-sounds-tracker` and returns JSON with `song_id`, `clip_id`, and `related_items` counts kept only as debug metadata.
+
+## Resolver actor
+
+The importer expects the exact validated Novi actor id at runtime. Supply it either with a flag:
+
+```bash
+cargo run -- library sound import-tiktok-trending \
+  --resolver-actor-id "<novi actor id>" \
+  --limit 1
+```
+
+Or through the env var:
+
+```bash
+export CAPCUT_CLI_TIKTOK_SOUND_RESOLVER_ACTOR_ID="<novi actor id>"
+```
+
+The resolver input profile is fixed in the repo:
+
+```json
+{
+  "type": "MUSIC",
+  "url": "<sound url>",
+  "region": "US",
+  "limit": 20,
+  "isUnlimited": false,
+  "publishTime": "MONTH",
+  "sortType": 1,
+  "isDownloadVideo": false,
+  "isDownloadVideoCover": false
+}
+```
 
 ## End-to-end import
 
 ```bash
 cargo run -- library sound import-tiktok-trending \
+  --resolver-actor-id "<novi actor id>" \
   --country "United States" \
   --period 7 \
   --limit 1 \
-  --max-posts 30 \
+  --max-posts 20 \
   --download-attempts 5
 ```
 
 The importer uses this actor chain:
 
 1. `alien_force~tiktok-trending-sounds-tracker`
-2. `powerai~tiktok-music-posts-video-scraper`
-3. `dltik~tiktok-video-downloader`
+2. the validated Novi sound/music resolver actor passed to `--resolver-actor-id`
 
 Selection behavior:
 
-- prefer the candidate with the highest `comment_count`
-- break ties with `share_count`, then `digg_count`, then `play_count`
-- fall back to the trend actor's `related_items` when the music-post actor returns no usable rows
-- try multiple ranked candidates before failing the sound
+- rank candidates by `digg_count` descending
+- use resolver order as the only tie-breaker
+- keep `related_items` only as debug metadata
+- try the next ranked candidate only if the preferred row does not expose a usable direct video media URL
+
+`--max-posts` caps the ranked candidates retained locally after the resolver returns its fixed `limit: 20` dataset.
 
 ## Expected artifacts
 
