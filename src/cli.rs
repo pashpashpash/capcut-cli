@@ -25,6 +25,8 @@ enum Command {
     Library(LibraryArgs),
     /// Compose clips with a sound into a final video.
     Compose(ComposeArgs),
+    /// One-shot agent workflow: discover, import, and compose automatically.
+    Autopilot(AutoPilotArgs),
 }
 
 impl Cli {
@@ -34,6 +36,7 @@ impl Cli {
             Command::Discover(args) => args.run(),
             Command::Library(args) => args.run(),
             Command::Compose(args) => args.run(),
+            Command::Autopilot(args) => args.run(),
         }
     }
 }
@@ -125,6 +128,9 @@ enum DiscoverAction {
         /// Region code.
         #[arg(long, default_value = "US")]
         region: String,
+        /// Rolling discovery window in days.
+        #[arg(long = "window-days", default_value_t = 7, value_parser = clap::value_parser!(u32).range(1..))]
+        window_days: u32,
     },
     /// Find viral video clips on X/Twitter.
     #[command(name = "x-clips")]
@@ -138,15 +144,22 @@ enum DiscoverAction {
         /// Minimum likes filter.
         #[arg(long, default_value_t = 1000)]
         min_likes: u64,
+        /// Return guided browser search URLs instead of failing when auth is missing.
+        #[arg(long, default_value_t = false)]
+        allow_guided_fallback: bool,
     },
 }
 
 impl DiscoverArgs {
     fn run(self) -> Result<()> {
         match self.action {
-            DiscoverAction::TiktokSounds { limit, region } => {
+            DiscoverAction::TiktokSounds {
+                limit,
+                region,
+                window_days,
+            } => {
                 let t = Instant::now();
-                match discover::tiktok::find_trending_sounds(limit, &region) {
+                match discover::tiktok::find_trending_sounds(limit, &region, window_days) {
                     Ok(data) => {
                         output::emit(&output::success("discover tiktok-sounds", data, Some(t)));
                     }
@@ -156,8 +169,7 @@ impl DiscoverArgs {
                             "DISCOVERY_FAILED",
                             &e.to_string(),
                             Some(
-                                "TikTok endpoints may be rate-limited. Try again later or import \
-                                 sounds manually with 'capcut-cli library import <url>'.",
+                                "Set TIKTOK_RESEARCH_ACCESS_TOKEN for official discovery. If the fallback scraper is failing, try again later or import a sound manually with 'capcut-cli library import <url> --type sound'.",
                             ),
                         ));
                         std::process::exit(1);
@@ -168,18 +180,48 @@ impl DiscoverArgs {
                 query,
                 limit,
                 min_likes,
+                allow_guided_fallback,
             } => {
                 let t = Instant::now();
-                match discover::twitter::find_viral_clips(&query, limit, min_likes) {
+                match discover::twitter::find_viral_clips(
+                    &query,
+                    limit,
+                    min_likes,
+                    allow_guided_fallback,
+                ) {
                     Ok(data) => {
                         output::emit(&output::success("discover x-clips", data, Some(t)));
                     }
                     Err(e) => {
+                        let (code, hint) = match e
+                            .downcast_ref::<discover::twitter::TwitterDiscoveryError>()
+                        {
+                            Some(discover::twitter::TwitterDiscoveryError::AuthRequired) => (
+                                "X_AUTH_REQUIRED",
+                                Some(
+                                    "Set TWITTER_BEARER_TOKEN for official X discovery, or pass \
+                                     --allow-guided-fallback to get browser search URLs instead.",
+                                ),
+                            ),
+                            Some(discover::twitter::TwitterDiscoveryError::RateLimited) => (
+                                "X_RATE_LIMITED",
+                                Some("Retry later or reduce request frequency."),
+                            ),
+                            Some(discover::twitter::TwitterDiscoveryError::ApiRequest { .. }) => (
+                                "X_API_REQUEST_FAILED",
+                                Some("Verify network access and your TWITTER_BEARER_TOKEN."),
+                            ),
+                            Some(discover::twitter::TwitterDiscoveryError::ApiStatus { .. }) => (
+                                "X_API_STATUS_ERROR",
+                                Some("Verify your TWITTER_BEARER_TOKEN and X API access tier."),
+                            ),
+                            None => ("DISCOVERY_FAILED", None),
+                        };
                         output::emit(&output::error(
                             "discover x-clips",
-                            "DISCOVERY_FAILED",
+                            code,
                             &e.to_string(),
-                            None,
+                            hint,
                         ));
                         std::process::exit(1);
                     }
@@ -250,11 +292,58 @@ impl LibraryArgs {
                         output::emit(&output::success("library import", data, Some(t)));
                     }
                     Err(e) => {
+                        let (code, hint) =
+                            match e.downcast_ref::<media::downloader::DownloadError>() {
+                                Some(media::downloader::DownloadError::XAuthRequired { .. }) => (
+                                    "X_AUTH_REQUIRED",
+                                    Some(
+                                        "Log into X in a supported local browser and rerun the \
+                                         import. Configure CAPCUT_X_COOKIE_BROWSERS if needed.",
+                                    ),
+                                ),
+                                Some(media::downloader::DownloadError::XRateLimited) => (
+                                    "X_RATE_LIMITED",
+                                    Some("Retry later; X temporarily rate-limited media access."),
+                                ),
+                                Some(media::downloader::DownloadError::XSuspended { .. }) => (
+                                    "X_TWEET_SUSPENDED",
+                                    Some("Pick another clip candidate; this tweet is suspended."),
+                                ),
+                                Some(media::downloader::DownloadError::XNoVideo { .. }) => (
+                                    "X_NO_VIDEO",
+                                    Some(
+                                        "Use a tweet URL that actually contains downloadable video \
+                                         media.",
+                                    ),
+                                ),
+                                Some(media::downloader::DownloadError::XVideoUnavailable { .. }) => (
+                                    "X_VIDEO_UNAVAILABLE",
+                                    Some("Pick another clip candidate; this video is unavailable."),
+                                ),
+                                Some(media::downloader::DownloadError::AudioConversionFailed { .. }) => (
+                                    "AUDIO_CONVERSION_FAILED",
+                                    Some("Verify ffmpeg is installed and supports MP3 encoding."),
+                                ),
+                                Some(media::downloader::DownloadError::YtDlpFailure { .. }) => (
+                                    "IMPORT_FAILED",
+                                    Some(
+                                        "Run 'capcut-cli deps check' to verify yt-dlp is \
+                                         installed.",
+                                    ),
+                                ),
+                                None => (
+                                    "IMPORT_FAILED",
+                                    Some(
+                                        "Run 'capcut-cli deps check' to verify yt-dlp is \
+                                         installed.",
+                                    ),
+                                ),
+                            };
                         output::emit(&output::error(
                             "library import",
-                            "IMPORT_FAILED",
+                            code,
                             &e.to_string(),
-                            Some("Run 'capcut-cli deps check' to verify yt-dlp is installed."),
+                            hint,
                         ));
                         std::process::exit(1);
                     }
@@ -374,4 +463,248 @@ impl ComposeArgs {
         }
         Ok(())
     }
+}
+
+// ── autopilot ───────────────────────────────────────────────────────
+
+#[derive(Debug, Args)]
+struct AutoPilotArgs {
+    /// Topic/query used to discover relevant X clips.
+    #[arg(long)]
+    query: String,
+
+    /// Region code used for TikTok sound discovery.
+    #[arg(long, default_value = "US")]
+    region: String,
+
+    /// Rolling window in days for TikTok sound discovery.
+    #[arg(long = "window-days", default_value_t = 7, value_parser = clap::value_parser!(u32).range(1..))]
+    window_days: u32,
+
+    /// Number of sound candidates to discover.
+    #[arg(long = "sound-limit", default_value_t = 5)]
+    sound_limit: u32,
+
+    /// Number of clip candidates to discover.
+    #[arg(long = "clip-limit", default_value_t = 5)]
+    clip_limit: u32,
+
+    /// Minimum likes threshold for clip discovery.
+    #[arg(long, default_value_t = 1000)]
+    min_likes: u64,
+
+    /// Output duration in seconds.
+    #[arg(long, default_value_t = 15.0)]
+    duration: f64,
+
+    /// Output file path. Auto-generated if omitted.
+    #[arg(long)]
+    output: Option<String>,
+
+    /// Output resolution WxH.
+    #[arg(long, default_value = "1080x1920")]
+    resolution: String,
+
+    /// Loudness preset or LUFS value.
+    #[arg(long)]
+    loudness: Option<String>,
+}
+
+impl AutoPilotArgs {
+    fn run(self) -> Result<()> {
+        let t = Instant::now();
+        config::ensure_dirs();
+
+        let sound_discovery = match discover::tiktok::find_trending_sounds(
+            self.sound_limit,
+            &self.region,
+            self.window_days,
+        ) {
+            Ok(data) => data,
+            Err(error) => {
+                output::emit(&output::error(
+                    "autopilot",
+                    "SOUND_DISCOVERY_FAILED",
+                    &error.to_string(),
+                    Some("Set TIKTOK_RESEARCH_ACCESS_TOKEN or retry later."),
+                ));
+                std::process::exit(1);
+            }
+        };
+        let clip_discovery =
+            match discover::twitter::find_viral_clips(&self.query, self.clip_limit, self.min_likes, false) {
+                Ok(data) => data,
+                Err(error) => {
+                    let hint = if error
+                        .downcast_ref::<discover::twitter::TwitterDiscoveryError>()
+                        .is_some()
+                    {
+                        Some("Set TWITTER_BEARER_TOKEN for official X discovery.")
+                    } else {
+                        None
+                    };
+                    output::emit(&output::error(
+                        "autopilot",
+                        "CLIP_DISCOVERY_FAILED",
+                        &error.to_string(),
+                        hint,
+                    ));
+                    std::process::exit(1);
+                }
+            };
+
+        let sound_candidates = extract_candidates(&sound_discovery, "sounds");
+        if sound_candidates.is_empty() {
+            output::emit(&output::error(
+                "autopilot",
+                "NO_SOUND_CANDIDATES",
+                "No TikTok sound candidates were returned by discovery.",
+                Some("Set TIKTOK_RESEARCH_ACCESS_TOKEN or retry later when Creative Center is available."),
+            ));
+            std::process::exit(1);
+        }
+
+        let clip_candidates = extract_candidates(&clip_discovery, "clips");
+        if clip_candidates.is_empty() {
+            output::emit(&output::error(
+                "autopilot",
+                "NO_CLIP_CANDIDATES",
+                "No X/Twitter clip candidates were returned by discovery.",
+                Some("Set TWITTER_BEARER_TOKEN and retry clip discovery."),
+            ));
+            std::process::exit(1);
+        }
+
+        let sound_tags = vec![
+            "auto".to_string(),
+            "workflow".to_string(),
+            "tiktok".to_string(),
+            "trending".to_string(),
+        ];
+        let clip_tags = vec![
+            "auto".to_string(),
+            "workflow".to_string(),
+            "x".to_string(),
+            "viral".to_string(),
+        ];
+
+        let (sound_asset, sound_source, sound_failures) =
+            match import_first_success(&sound_candidates, "sound", &sound_tags) {
+                Ok(result) => result,
+                Err(error) => {
+                    output::emit(&output::error(
+                        "autopilot",
+                        "SOUND_IMPORT_FAILED",
+                        &error.to_string(),
+                        Some("No discovered sound candidate could be imported."),
+                    ));
+                    std::process::exit(1);
+                }
+            };
+        let (clip_asset, clip_source, clip_failures) =
+            match import_first_success(&clip_candidates, "clip", &clip_tags) {
+                Ok(result) => result,
+                Err(error) => {
+                    output::emit(&output::error(
+                        "autopilot",
+                        "CLIP_IMPORT_FAILED",
+                        &error.to_string(),
+                        Some("No discovered clip candidate could be imported."),
+                    ));
+                    std::process::exit(1);
+                }
+            };
+
+        let composed = match media::compose::run_compose(
+            &sound_asset.id,
+            &[clip_asset.id.clone()],
+            self.duration,
+            self.output.as_deref(),
+            &self.resolution,
+            self.loudness.as_deref(),
+        ) {
+            Ok(result) => result,
+            Err(error) => {
+                output::emit(&output::error(
+                    "autopilot",
+                    "COMPOSE_FAILED",
+                    &error.to_string(),
+                    Some("Discovery and import succeeded, but compose failed."),
+                ));
+                std::process::exit(1);
+            }
+        };
+
+        let data = serde_json::json!({
+            "workflow": "autopilot",
+            "query": self.query,
+            "region": self.region,
+            "window_days": self.window_days,
+            "selected": {
+                "sound_source_url": sound_source,
+                "clip_source_url": clip_source,
+                "sound_asset_id": sound_asset.id,
+                "clip_asset_id": clip_asset.id,
+            },
+            "attempts": {
+                "sound_candidates_considered": sound_candidates.len(),
+                "clip_candidates_considered": clip_candidates.len(),
+                "sound_import_failures": sound_failures,
+                "clip_import_failures": clip_failures,
+            },
+            "compose": serde_json::to_value(composed)?,
+        });
+
+        output::emit(&output::success("autopilot", data, Some(t)));
+        Ok(())
+    }
+}
+
+fn extract_candidates(data: &serde_json::Value, key: &str) -> Vec<serde_json::Value> {
+    data.get(key)
+        .and_then(|v| v.as_array())
+        .cloned()
+        .unwrap_or_default()
+}
+
+fn candidate_import_url(candidate: &serde_json::Value) -> Option<String> {
+    candidate
+        .get("import_url")
+        .and_then(|v| v.as_str())
+        .map(|s| s.trim().to_string())
+        .filter(|s| !s.is_empty())
+}
+
+fn import_first_success(
+    candidates: &[serde_json::Value],
+    asset_type: &str,
+    tags: &[String],
+) -> Result<(crate::models::Asset, String, Vec<serde_json::Value>)> {
+    let mut failures = Vec::new();
+
+    for candidate in candidates {
+        let Some(url) = candidate_import_url(candidate) else {
+            failures.push(serde_json::json!({
+                "reason": "candidate_missing_import_url"
+            }));
+            continue;
+        };
+
+        match library::import_asset(&url, Some(asset_type), tags) {
+            Ok(asset) => return Ok((asset, url, failures)),
+            Err(err) => {
+                failures.push(serde_json::json!({
+                    "import_url": url,
+                    "error": err.to_string(),
+                }));
+            }
+        }
+    }
+
+    let err = if asset_type == "sound" {
+        anyhow::anyhow!("Autopilot could not import any discovered sound candidate.")
+    } else {
+        anyhow::anyhow!("Autopilot could not import any discovered clip candidate.")
+    };
+    Err(err)
 }
