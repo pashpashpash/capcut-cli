@@ -1,6 +1,7 @@
 /target
+.DS_Store
 
-# Python
+# Python (legacy MVP)
 py/.venv/
 py/*.egg-info/
 __pycache__/

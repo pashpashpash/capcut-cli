@@ -1,4 +1,7 @@
 mod cli;
+mod downloader;
+mod ffmpeg;
+mod library;
 mod models;
 
 use clap::Parser;
