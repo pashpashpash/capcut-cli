@@ -343,6 +343,13 @@ struct ComposeArgs {
     loudness: Option<String>,
 }
 
+// Make ComposeArgs fields accessible for testing
+#[cfg(test)]
+impl ComposeArgs {
+    fn resolution(&self) -> &str { &self.resolution }
+    fn duration(&self) -> f64 { self.duration }
+}
+
 impl ComposeArgs {
     fn run(self) -> Result<()> {
         let t = Instant::now();
@@ -373,5 +380,286 @@ impl ComposeArgs {
             }
         }
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use clap::Parser;
+
+    use super::*;
+
+    fn parse(args: &[&str]) -> Result<Cli, clap::Error> {
+        Cli::try_parse_from(args)
+    }
+
+    // ── deps ───────────────────────────────────────────────────────
+
+    #[test]
+    fn parse_deps_check() {
+        let cli = parse(&["capcut-cli", "deps", "check"]).unwrap();
+        assert!(matches!(cli.command, Command::Deps(_)));
+    }
+
+    #[test]
+    fn parse_deps_install() {
+        let cli = parse(&["capcut-cli", "deps", "install"]).unwrap();
+        assert!(matches!(cli.command, Command::Deps(_)));
+    }
+
+    // ── discover ───────────────────────────────────────────────────
+
+    #[test]
+    fn parse_discover_tiktok_sounds_defaults() {
+        let cli = parse(&["capcut-cli", "discover", "tiktok-sounds"]).unwrap();
+        match cli.command {
+            Command::Discover(DiscoverArgs {
+                action: DiscoverAction::TiktokSounds { limit, region },
+            }) => {
+                assert_eq!(limit, 10);
+                assert_eq!(region, "US");
+            }
+            _ => panic!("expected TiktokSounds"),
+        }
+    }
+
+    #[test]
+    fn parse_discover_tiktok_sounds_custom_args() {
+        let cli = parse(&[
+            "capcut-cli", "discover", "tiktok-sounds", "--limit", "20", "--region", "UK",
+        ])
+        .unwrap();
+        match cli.command {
+            Command::Discover(DiscoverArgs {
+                action: DiscoverAction::TiktokSounds { limit, region },
+            }) => {
+                assert_eq!(limit, 20);
+                assert_eq!(region, "UK");
+            }
+            _ => panic!("expected TiktokSounds"),
+        }
+    }
+
+    #[test]
+    fn parse_discover_x_clips() {
+        let cli = parse(&[
+            "capcut-cli", "discover", "x-clips", "--query", "ai agents",
+        ])
+        .unwrap();
+        match cli.command {
+            Command::Discover(DiscoverArgs {
+                action:
+                    DiscoverAction::XClips {
+                        query,
+                        limit,
+                        min_likes,
+                    },
+            }) => {
+                assert_eq!(query, "ai agents");
+                assert_eq!(limit, 10);
+                assert_eq!(min_likes, 1000);
+            }
+            _ => panic!("expected XClips"),
+        }
+    }
+
+    #[test]
+    fn parse_discover_x_clips_requires_query() {
+        let result = parse(&["capcut-cli", "discover", "x-clips"]);
+        assert!(result.is_err());
+    }
+
+    // ── library ────────────────────────────────────────────────────
+
+    #[test]
+    fn parse_library_import() {
+        let cli = parse(&[
+            "capcut-cli",
+            "library",
+            "import",
+            "https://youtube.com/watch?v=test",
+            "--type",
+            "sound",
+        ])
+        .unwrap();
+        match cli.command {
+            Command::Library(LibraryArgs {
+                action:
+                    LibraryAction::Import {
+                        url,
+                        asset_type,
+                        tags,
+                    },
+            }) => {
+                assert_eq!(url, "https://youtube.com/watch?v=test");
+                assert_eq!(asset_type.as_deref(), Some("sound"));
+                assert_eq!(tags, "");
+            }
+            _ => panic!("expected Library Import"),
+        }
+    }
+
+    #[test]
+    fn parse_library_import_with_tags() {
+        let cli = parse(&[
+            "capcut-cli",
+            "library",
+            "import",
+            "https://example.com/vid",
+            "--tags",
+            "trending,viral",
+        ])
+        .unwrap();
+        match cli.command {
+            Command::Library(LibraryArgs {
+                action: LibraryAction::Import { tags, .. },
+            }) => {
+                assert_eq!(tags, "trending,viral");
+            }
+            _ => panic!("expected Library Import"),
+        }
+    }
+
+    #[test]
+    fn parse_library_list_no_filter() {
+        let cli = parse(&["capcut-cli", "library", "list"]).unwrap();
+        match cli.command {
+            Command::Library(LibraryArgs {
+                action: LibraryAction::List { asset_type },
+            }) => {
+                assert!(asset_type.is_none());
+            }
+            _ => panic!("expected Library List"),
+        }
+    }
+
+    #[test]
+    fn parse_library_list_with_filter() {
+        let cli = parse(&["capcut-cli", "library", "list", "--type", "clip"]).unwrap();
+        match cli.command {
+            Command::Library(LibraryArgs {
+                action: LibraryAction::List { asset_type },
+            }) => {
+                assert_eq!(asset_type.as_deref(), Some("clip"));
+            }
+            _ => panic!("expected Library List"),
+        }
+    }
+
+    #[test]
+    fn parse_library_show() {
+        let cli = parse(&["capcut-cli", "library", "show", "snd_abc123"]).unwrap();
+        match cli.command {
+            Command::Library(LibraryArgs {
+                action: LibraryAction::Show { asset_id },
+            }) => {
+                assert_eq!(asset_id, "snd_abc123");
+            }
+            _ => panic!("expected Library Show"),
+        }
+    }
+
+    #[test]
+    fn parse_library_delete() {
+        let cli = parse(&["capcut-cli", "library", "delete", "clp_xyz789"]).unwrap();
+        match cli.command {
+            Command::Library(LibraryArgs {
+                action: LibraryAction::Delete { asset_id },
+            }) => {
+                assert_eq!(asset_id, "clp_xyz789");
+            }
+            _ => panic!("expected Library Delete"),
+        }
+    }
+
+    // ── compose ────────────────────────────────────────────────────
+
+    #[test]
+    fn parse_compose_minimal() {
+        let cli = parse(&[
+            "capcut-cli", "compose", "--sound", "snd_abc", "--clip", "clp_def",
+        ])
+        .unwrap();
+        match cli.command {
+            Command::Compose(args) => {
+                assert_eq!(args.sound, "snd_abc");
+                assert_eq!(args.clips, vec!["clp_def"]);
+                assert_eq!(args.duration(), 30.0);
+                assert_eq!(args.resolution(), "1080x1920");
+                assert!(args.output.is_none());
+                assert!(args.loudness.is_none());
+            }
+            _ => panic!("expected Compose"),
+        }
+    }
+
+    #[test]
+    fn parse_compose_multiple_clips() {
+        let cli = parse(&[
+            "capcut-cli", "compose", "--sound", "snd_abc", "--clip", "clp_1", "--clip", "clp_2",
+        ])
+        .unwrap();
+        match cli.command {
+            Command::Compose(args) => {
+                assert_eq!(args.clips, vec!["clp_1", "clp_2"]);
+            }
+            _ => panic!("expected Compose"),
+        }
+    }
+
+    #[test]
+    fn parse_compose_all_options() {
+        let cli = parse(&[
+            "capcut-cli",
+            "compose",
+            "--sound",
+            "snd_abc",
+            "--clip",
+            "clp_def",
+            "--duration",
+            "60",
+            "--output",
+            "/tmp/out.mp4",
+            "--resolution",
+            "720x1280",
+            "--loudness",
+            "podcast",
+        ])
+        .unwrap();
+        match cli.command {
+            Command::Compose(args) => {
+                assert_eq!(args.duration(), 60.0);
+                assert_eq!(args.output.as_deref(), Some("/tmp/out.mp4"));
+                assert_eq!(args.resolution(), "720x1280");
+                assert_eq!(args.loudness.as_deref(), Some("podcast"));
+            }
+            _ => panic!("expected Compose"),
+        }
+    }
+
+    #[test]
+    fn parse_compose_requires_sound() {
+        let result = parse(&["capcut-cli", "compose", "--clip", "clp_def"]);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn parse_compose_requires_clip() {
+        let result = parse(&["capcut-cli", "compose", "--sound", "snd_abc"]);
+        assert!(result.is_err());
+    }
+
+    // ── error cases ────────────────────────────────────────────────
+
+    #[test]
+    fn parse_unknown_command_errors() {
+        let result = parse(&["capcut-cli", "nonexistent"]);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn parse_no_args_errors() {
+        let result = parse(&["capcut-cli"]);
+        assert!(result.is_err());
     }
 }
