@@ -408,6 +408,9 @@ struct JudgeSoundArgs {
     excluded_risks: Vec<String>,
 
     #[arg(long)]
+    max_risk_count: Option<usize>,
+
+    #[arg(long)]
     min_downloaded_videos: Option<usize>,
 
     #[arg(long)]
@@ -471,6 +474,7 @@ impl JudgeSoundArgs {
             required_reasons: self.required_reasons.clone(),
             recommended_actions: self.recommended_actions.clone(),
             excluded_risks: self.excluded_risks.clone(),
+            max_risk_count: self.max_risk_count,
             min_downloaded_videos: self.min_downloaded_videos,
             min_extracted_audios: self.min_extracted_audios,
             min_representative_views: self.min_representative_views,
@@ -484,6 +488,7 @@ impl JudgeSoundArgs {
             &self.required_reasons,
             &self.recommended_actions,
             &self.excluded_risks,
+            self.max_risk_count,
             self.min_downloaded_videos,
             self.min_extracted_audios,
             self.min_representative_views,
@@ -574,6 +579,7 @@ fn filter_judged_sounds(
     required_reasons: &[String],
     recommended_actions: &[String],
     excluded_risks: &[String],
+    max_risk_count: Option<usize>,
     min_downloaded_videos: Option<usize>,
     min_extracted_audios: Option<usize>,
     min_representative_views: Option<u64>,
@@ -615,6 +621,10 @@ fn filter_judged_sounds(
                 .iter()
                 .any(|risk| matches_any_excluded_risk(risk, excluded_risks))
         });
+    }
+
+    if let Some(max_risk_count) = max_risk_count {
+        sounds.retain(|sound| sound.risks.len() <= max_risk_count);
     }
 
     if let Some(min_downloaded_videos) = min_downloaded_videos {
@@ -783,6 +793,7 @@ mod tests {
             None,
             None,
             None,
+            None,
             Some(1),
         );
 
@@ -811,6 +822,7 @@ mod tests {
             None,
             None,
             None,
+            None,
         );
 
         assert_eq!(filtered.len(), 1);
@@ -831,6 +843,7 @@ mod tests {
             &[],
             &[],
             &[],
+            None,
             None,
             None,
             None,
@@ -872,6 +885,7 @@ mod tests {
             None,
             None,
             None,
+            None,
         );
 
         assert_eq!(filtered.len(), 1);
@@ -896,6 +910,7 @@ mod tests {
             &[],
             &[],
             &[],
+            None,
             Some(2),
             Some(2),
             None,
@@ -925,6 +940,7 @@ mod tests {
             &[],
             &[],
             &[],
+            None,
             None,
             None,
             Some(1_000_000),
@@ -960,10 +976,47 @@ mod tests {
             None,
             None,
             None,
+            None,
         );
 
         assert_eq!(filtered.len(), 1);
         assert_eq!(filtered[0].sound_id, "sound_b");
+    }
+
+    #[test]
+    fn filter_judged_sounds_applies_risk_count_threshold() {
+        let no_risks = judged_sound("sound_a", 95, "shortlist_after_rights_review");
+        let mut one_risk = judged_sound("sound_b", 95, "shortlist_after_rights_review");
+        one_risk
+            .risks
+            .push("Rights still need manual verification before production use".to_string());
+        let mut two_risks = judged_sound("sound_c", 95, "shortlist_after_rights_review");
+        two_risks
+            .risks
+            .push("Rights still need manual verification before production use".to_string());
+        two_risks
+            .risks
+            .push("No representative engagement metrics are recorded".to_string());
+
+        let filtered = filter_judged_sounds(
+            vec![no_risks, one_risk, two_risks],
+            None,
+            None,
+            &[],
+            &[],
+            &[],
+            &[],
+            Some(1),
+            None,
+            None,
+            None,
+            None,
+            None,
+        );
+
+        assert_eq!(filtered.len(), 2);
+        assert_eq!(filtered[0].sound_id, "sound_a");
+        assert_eq!(filtered[1].sound_id, "sound_b");
     }
 
     #[test]

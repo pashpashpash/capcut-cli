@@ -46,7 +46,7 @@ Add a local judgement/report command over imported sounds before adding more net
 
 ```bash
 capcut-cli library sound judge --manifest library/sounds/manifest.json
-capcut-cli library sound judge --manifest library/sounds/manifest.json --platform tiktok --require-reason "downloaded candidate" --min-score 75 --max-trend-rank 25 --min-downloaded-videos 2 --min-extracted-audios 2 --min-representative-views 1000000 --min-representative-likes 100000 --exclude-risk "Rights still need" --top 3
+capcut-cli library sound judge --manifest library/sounds/manifest.json --platform tiktok --require-reason "downloaded candidate" --min-score 75 --max-trend-rank 25 --min-downloaded-videos 2 --min-extracted-audios 2 --min-representative-views 1000000 --min-representative-likes 100000 --exclude-risk "Rights still need" --max-risk-count 1 --top 3
 ```
 
 The command should be offline and deterministic. It should read the committed manifest plus per-sound metadata and output JSON with:
@@ -80,6 +80,7 @@ Implemented refinements:
 - `filtered_summary` summarizes the returned shortlist separately from the full-library `summary`, which makes narrow passes easier to inspect without re-counting rows
 - `sort_order` is echoed in judgement reports so agents know returned rows are ordered by score descending, trend rank ascending, then sound id ascending
 - repeated `--exclude-risk` filters remove sounds whose risk text contains a matching substring, allowing production-oriented passes to drop known blockers such as unresolved rights review
+- `--max-risk-count` caps how many remaining risk notes a returned sound may carry, with `--max-risk-count 0` acting as a strict risk-free shortlist mode
 - judgement summaries now include risk text counts, so risk-filtered runs can show both the returned shortlist risks and the full-library blocker distribution
 - judgement summaries now include reason text counts, so agents can see which positive signals are actually driving a shortlist instead of reading every returned row
 - `--max-trend-rank` filters the judgement report to sounds with recorded chart positions at or above a rank cutoff, making viral-rank passes explicit instead of relying only on score side effects
