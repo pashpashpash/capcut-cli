@@ -76,6 +76,7 @@ Implemented refinements:
 - `--min-representative-views` and `--min-representative-likes` let the shortlist require direct engagement evidence instead of trusting chart rank alone
 - judgement reports echo the applied `filters` next to `total_count`, `judged_count`, and `summary`, so zero-result shortlists remain explainable without reconstructing CLI flags from shell history
 - `filtered_out_count` makes zero-result or narrow-result reports explicit about how many sounds were removed by the filters
+- `filtered_summary` summarizes the returned shortlist separately from the full-library `summary`, which makes narrow passes easier to inspect without re-counting rows
 
 ## Provider ladder
 

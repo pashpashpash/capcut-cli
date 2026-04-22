@@ -134,7 +134,7 @@ cargo run -- library sound judge --min-score 75 --min-downloaded-videos 2 --min-
 
 The report scores each sound using recorded trend rank, downloaded/extracted asset coverage, representative engagement metrics when present, and provenance/rights risks. This is the deterministic "what deserves attention, and why?" pass before importing or composing more assets.
 
-Filtered reports keep `total_count`, `judged_count`, `filtered_out_count`, echo the applied `filters`, and include a summary of recommendation and score-band counts, so agents can see the whole library distribution while only receiving the shortlist rows they asked for. Use `--min-downloaded-videos` and `--min-extracted-audios` when a candidate needs enough local material for editing, not just a high score. Use `--min-representative-views` and `--min-representative-likes` when the shortlist should require direct engagement evidence.
+Filtered reports keep `total_count`, `judged_count`, `filtered_out_count`, echo the applied `filters`, and include both full-library `summary` and returned-row `filtered_summary` counts, so agents can see the whole library distribution while only receiving the shortlist rows they asked for. Use `--min-downloaded-videos` and `--min-extracted-audios` when a candidate needs enough local material for editing, not just a high score. Use `--min-representative-views` and `--min-representative-likes` when the shortlist should require direct engagement evidence.
 
 ## Output layout
 

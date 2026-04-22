@@ -445,6 +445,7 @@ impl JudgeSoundArgs {
             self.top,
         );
         let filtered_out_count = total_count - sounds.len();
+        let filtered_summary = summarize_judged_sounds(&sounds);
 
         Ok(AppReport::SoundJudgement(SoundJudgementReport {
             manifest_path: self.manifest.display().to_string(),
@@ -453,6 +454,7 @@ impl JudgeSoundArgs {
             filtered_out_count,
             filters,
             summary,
+            filtered_summary,
             sounds,
         }))
     }

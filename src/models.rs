@@ -151,6 +151,7 @@ pub struct SoundJudgementReport {
     pub filtered_out_count: usize,
     pub filters: SoundJudgementFilters,
     pub summary: SoundJudgementSummary,
+    pub filtered_summary: SoundJudgementSummary,
     pub sounds: Vec<JudgedSound>,
 }
 
