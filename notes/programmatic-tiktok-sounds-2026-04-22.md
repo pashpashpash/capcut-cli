@@ -102,6 +102,7 @@ Implemented refinements:
 - returned sounds include `usable_asset_pair_count`, and judgement summaries include `usable_asset_pair_coverage_counts`, so agents can see how many complete video/audio pairs are actually ready
 - `--min-usable-asset-pairs` lets production shortlists require complete downloaded-video/extracted-audio pairs instead of checking both raw asset counts manually
 - judgement summaries now include `reason_count_coverage_counts` and `risk_count_coverage_counts`, so agents can compare signal and blocker density before opening individual rows
+- judgement summaries now include `trend_rank_band_counts`, so agents can compare top-10, mid-chart, long-tail, and unranked sound distribution before opening individual rows
 - `--min-reason-count` lets shortlists require enough positive evidence before returning a sound, complementing `--max-risk-count` for blocker density
 - `--max-judgement-rank` keeps filtered passes inside the full-library top N by score, trend rank, and sound id, so narrow filters do not accidentally surface low-ranked candidates
 - returned sounds include source URLs and TikTok identifiers (`source_url`, `source_video_url`, `song_id`, `clip_id`, `country_code`, and `duration_seconds`), so shortlisted rows remain traceable without reopening the manifest

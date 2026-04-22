@@ -192,6 +192,7 @@ pub struct SoundJudgementSummary {
     pub recommended_action_counts: Vec<RecommendedActionCount>,
     pub platform_counts: Vec<PlatformCount>,
     pub score_band_counts: Vec<ScoreBandCount>,
+    pub trend_rank_band_counts: Vec<TrendRankBandCount>,
     pub reason_count_coverage_counts: Vec<ReasonCountCoverageCount>,
     pub risk_count_coverage_counts: Vec<RiskCountCoverageCount>,
     pub downloaded_video_coverage_counts: Vec<DownloadedVideoCoverageCount>,
@@ -232,6 +233,12 @@ pub struct PlatformCount {
 
 #[derive(Debug, Serialize)]
 pub struct ScoreBandCount {
+    pub band: String,
+    pub count: usize,
+}
+
+#[derive(Debug, Serialize)]
+pub struct TrendRankBandCount {
     pub band: String,
     pub count: usize,
 }
