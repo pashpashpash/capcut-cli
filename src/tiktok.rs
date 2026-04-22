@@ -640,6 +640,35 @@ fn judge_manifest_entry(manifest_path: &Path, entry: &ManifestEntry) -> Result<J
         .filter_map(|(field, is_present)| (!is_present).then(|| (*field).to_string()))
         .collect::<Vec<_>>();
     let representative_engagement_metric_count = representative_engagement_metric_fields.len();
+    let local_artifact_paths = [
+        ("local_audio_path", Some(entry.local_audio_path.as_str())),
+        ("local_video_path", entry.local_video_path.as_deref()),
+        (
+            "local_metadata_path",
+            Some(entry.local_metadata_path.as_str()),
+        ),
+        ("local_trend_path", entry.local_trend_path.as_deref()),
+        ("local_posts_path", entry.local_posts_path.as_deref()),
+        (
+            "local_selection_path",
+            entry.local_selection_path.as_deref(),
+        ),
+        ("local_download_path", entry.local_download_path.as_deref()),
+    ];
+    let local_artifact_path_fields = local_artifact_paths
+        .iter()
+        .filter_map(|(field, path)| {
+            path.is_some_and(|path| !path.trim().is_empty())
+                .then(|| (*field).to_string())
+        })
+        .collect::<Vec<_>>();
+    let missing_local_artifact_path_fields = local_artifact_paths
+        .iter()
+        .filter_map(|(field, path)| {
+            (!path.is_some_and(|path| !path.trim().is_empty())).then(|| (*field).to_string())
+        })
+        .collect::<Vec<_>>();
+    let local_artifact_path_count = local_artifact_path_fields.len();
 
     let mut score = 0;
     let mut reasons = Vec::new();
@@ -741,6 +770,9 @@ fn judge_manifest_entry(manifest_path: &Path, entry: &ManifestEntry) -> Result<J
         local_posts_path: entry.local_posts_path.clone(),
         local_selection_path: entry.local_selection_path.clone(),
         local_download_path: entry.local_download_path.clone(),
+        local_artifact_path_count,
+        local_artifact_path_fields,
+        missing_local_artifact_path_fields,
         downloaded_video_count,
         extracted_audio_count,
         usable_asset_pair_count,
@@ -1980,6 +2012,17 @@ mod tests {
             local_posts_path: Some(format!("library/sounds/imported/{id}/posts.json")),
             local_selection_path: Some(format!("library/sounds/imported/{id}/selection.json")),
             local_download_path: Some(format!("library/sounds/imported/{id}/download.json")),
+            local_artifact_path_count: 7,
+            local_artifact_path_fields: vec![
+                "local_audio_path".to_string(),
+                "local_video_path".to_string(),
+                "local_metadata_path".to_string(),
+                "local_trend_path".to_string(),
+                "local_posts_path".to_string(),
+                "local_selection_path".to_string(),
+                "local_download_path".to_string(),
+            ],
+            missing_local_artifact_path_fields: Vec::new(),
             downloaded_video_count: Some(1),
             extracted_audio_count: Some(1),
             usable_asset_pair_count: Some(1),
@@ -2095,6 +2138,24 @@ mod tests {
             Some("library/sounds/imported/example/video.mp4".to_string())
         );
         assert_eq!(judged.local_metadata_path, "missing-metadata.json");
+        assert_eq!(judged.local_artifact_path_count, 3);
+        assert_eq!(
+            judged.local_artifact_path_fields,
+            vec![
+                "local_audio_path".to_string(),
+                "local_video_path".to_string(),
+                "local_metadata_path".to_string()
+            ]
+        );
+        assert_eq!(
+            judged.missing_local_artifact_path_fields,
+            vec![
+                "local_trend_path".to_string(),
+                "local_posts_path".to_string(),
+                "local_selection_path".to_string(),
+                "local_download_path".to_string()
+            ]
+        );
         assert_eq!(judged.candidate_post_count, None);
         assert_eq!(judged.usable_asset_pair_count, Some(2));
         assert_eq!(judged.representative_engagement_count, Some(129_000));

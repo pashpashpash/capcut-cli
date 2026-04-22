@@ -69,6 +69,9 @@ The command should be offline and deterministic. It should read the committed ma
 - `local_posts_path`
 - `local_selection_path`
 - `local_download_path`
+- `local_artifact_path_count`
+- `local_artifact_path_fields`
+- `missing_local_artifact_path_fields`
 - `downloaded_video_count`
 - `extracted_audio_count`
 - `candidate_post_count`
@@ -103,6 +106,7 @@ Implemented refinements:
 - `--max-judgement-rank` keeps filtered passes inside the full-library top N by score, trend rank, and sound id, so narrow filters do not accidentally surface low-ranked candidates
 - returned sounds include source URLs and TikTok identifiers (`source_url`, `source_video_url`, `song_id`, `clip_id`, `country_code`, and `duration_seconds`), so shortlisted rows remain traceable without reopening the manifest
 - returned sounds include local artifact paths (`local_audio_path`, `local_video_path`, `local_metadata_path`, `local_trend_path`, `local_posts_path`, `local_selection_path`, and `local_download_path`), so follow-up editing and audit steps can jump straight to retained assets
+- returned sounds include local artifact path coverage (`local_artifact_path_count`, `local_artifact_path_fields`, and `missing_local_artifact_path_fields`), so agents can tell which retained audit/editing files are recorded without comparing every nullable path
 - `--min-representative-views`, `--min-representative-likes`, `--min-representative-comments`, and `--min-representative-shares` let the shortlist require direct engagement, discussion, and spread evidence instead of trusting chart rank alone
 - returned sounds include `representative_engagement_count`, and `--min-representative-engagements` lets shortlists require absolute likes, comments, and shares volume before trusting dense but tiny samples
 - judgement summaries now include `representative_engagement_count_band_counts`, so agents can compare absolute engagement-volume distribution before opening individual rows
