@@ -199,6 +199,7 @@ pub struct SoundJudgementSummary {
     pub usable_asset_pair_coverage_counts: Vec<UsableAssetPairCoverageCount>,
     pub candidate_post_coverage_counts: Vec<CandidatePostCoverageCount>,
     pub local_artifact_path_coverage_counts: Vec<LocalArtifactPathCoverageCount>,
+    pub local_artifact_path_field_counts: Vec<LocalArtifactPathFieldCount>,
     pub engagement_metric_coverage_counts: Vec<EngagementMetricCoverageCount>,
     pub representative_view_count_band_counts: Vec<RepresentativeViewCountBandCount>,
     pub representative_engagement_count_band_counts: Vec<RepresentativeEngagementCountBandCount>,
@@ -278,6 +279,12 @@ pub struct EngagementMetricCoverageCount {
 #[derive(Debug, Serialize)]
 pub struct LocalArtifactPathCoverageCount {
     pub local_artifact_path_count: usize,
+    pub count: usize,
+}
+
+#[derive(Debug, Serialize)]
+pub struct LocalArtifactPathFieldCount {
+    pub field: String,
     pub count: usize,
 }
 
