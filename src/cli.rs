@@ -439,6 +439,9 @@ struct JudgeSoundArgs {
     min_representative_comments: Option<u64>,
 
     #[arg(long)]
+    min_representative_comment_rate_per_1000_views: Option<u64>,
+
+    #[arg(long)]
     min_representative_shares: Option<u64>,
 
     #[arg(long)]
@@ -536,6 +539,8 @@ impl JudgeSoundArgs {
             min_representative_engagement_rate_per_1000_views: self
                 .min_representative_engagement_rate_per_1000_views,
             min_representative_comments: self.min_representative_comments,
+            min_representative_comment_rate_per_1000_views: self
+                .min_representative_comment_rate_per_1000_views,
             min_representative_shares: self.min_representative_shares,
             min_representative_share_rate_per_1000_views: self
                 .min_representative_share_rate_per_1000_views,
@@ -558,6 +563,7 @@ impl JudgeSoundArgs {
             self.min_representative_like_rate_per_1000_views,
             self.min_representative_engagement_rate_per_1000_views,
             self.min_representative_comments,
+            self.min_representative_comment_rate_per_1000_views,
             self.min_representative_shares,
             self.min_representative_share_rate_per_1000_views,
             self.min_representative_engagement_metrics,
@@ -679,6 +685,7 @@ fn filter_judged_sounds(
     min_representative_like_rate_per_1000_views: Option<u64>,
     min_representative_engagement_rate_per_1000_views: Option<u64>,
     min_representative_comments: Option<u64>,
+    min_representative_comment_rate_per_1000_views: Option<u64>,
     min_representative_shares: Option<u64>,
     min_representative_share_rate_per_1000_views: Option<u64>,
     min_representative_engagement_metrics: Option<usize>,
@@ -775,6 +782,17 @@ fn filter_judged_sounds(
     if let Some(min_representative_comments) = min_representative_comments {
         sounds.retain(|sound| {
             sound.representative_comment_count.unwrap_or_default() >= min_representative_comments
+        });
+    }
+
+    if let Some(min_representative_comment_rate_per_1000_views) =
+        min_representative_comment_rate_per_1000_views
+    {
+        sounds.retain(|sound| {
+            sound
+                .representative_comment_rate_per_1000_views
+                .unwrap_or_default()
+                >= min_representative_comment_rate_per_1000_views
         });
     }
 
@@ -935,6 +953,7 @@ mod tests {
             representative_like_rate_per_1000_views: None,
             representative_engagement_rate_per_1000_views: None,
             representative_comment_count: None,
+            representative_comment_rate_per_1000_views: None,
             representative_share_count: None,
             representative_share_rate_per_1000_views: None,
             representative_engagement_metric_count: 0,
@@ -966,6 +985,7 @@ mod tests {
             &[],
             &["USE_FIRST".to_string(), "shortlist".to_string()],
             &[],
+            None,
             None,
             None,
             None,
@@ -1012,6 +1032,7 @@ mod tests {
             None,
             None,
             None,
+            None,
             &[],
             None,
         );
@@ -1034,6 +1055,7 @@ mod tests {
             &[],
             &[],
             &[],
+            None,
             None,
             None,
             None,
@@ -1089,6 +1111,7 @@ mod tests {
             None,
             None,
             None,
+            None,
             &[],
             None,
         );
@@ -1126,6 +1149,7 @@ mod tests {
             None,
             None,
             None,
+            None,
             &[],
             None,
         );
@@ -1142,6 +1166,7 @@ mod tests {
         high_engagement.representative_like_rate_per_1000_views = Some(75);
         high_engagement.representative_engagement_rate_per_1000_views = Some(142);
         high_engagement.representative_comment_count = Some(15_000);
+        high_engagement.representative_comment_rate_per_1000_views = Some(7);
         high_engagement.representative_share_count = Some(120_000);
         high_engagement.representative_share_rate_per_1000_views = Some(60);
         let mut low_discussion = judged_sound("sound_b", 95, "shortlist_after_rights_review");
@@ -1150,6 +1175,7 @@ mod tests {
         low_discussion.representative_like_rate_per_1000_views = Some(75);
         low_discussion.representative_engagement_rate_per_1000_views = Some(137);
         low_discussion.representative_comment_count = Some(5_000);
+        low_discussion.representative_comment_rate_per_1000_views = Some(2);
         low_discussion.representative_share_count = Some(120_000);
         low_discussion.representative_share_rate_per_1000_views = Some(60);
         let mut low_spread = judged_sound("sound_c", 95, "shortlist_after_rights_review");
@@ -1158,6 +1184,7 @@ mod tests {
         low_spread.representative_like_rate_per_1000_views = Some(75);
         low_spread.representative_engagement_rate_per_1000_views = Some(85);
         low_spread.representative_comment_count = Some(15_000);
+        low_spread.representative_comment_rate_per_1000_views = Some(7);
         low_spread.representative_share_count = Some(5_000);
         low_spread.representative_share_rate_per_1000_views = Some(2);
         let mut low_like_density = judged_sound("sound_d", 95, "shortlist_after_rights_review");
@@ -1166,6 +1193,7 @@ mod tests {
         low_like_density.representative_like_rate_per_1000_views = Some(15);
         low_like_density.representative_engagement_rate_per_1000_views = Some(28);
         low_like_density.representative_comment_count = Some(15_000);
+        low_like_density.representative_comment_rate_per_1000_views = Some(1);
         low_like_density.representative_share_count = Some(120_000);
         low_like_density.representative_share_rate_per_1000_views = Some(12);
         let mut low_share_density = judged_sound("sound_e", 95, "shortlist_after_rights_review");
@@ -1174,9 +1202,19 @@ mod tests {
         low_share_density.representative_like_rate_per_1000_views = Some(100);
         low_share_density.representative_engagement_rate_per_1000_views = Some(114);
         low_share_density.representative_comment_count = Some(20_000);
+        low_share_density.representative_comment_rate_per_1000_views = Some(2);
         low_share_density.representative_share_count = Some(120_000);
         low_share_density.representative_share_rate_per_1000_views = Some(12);
-        let missing_metrics = judged_sound("sound_f", 95, "shortlist_after_rights_review");
+        let mut low_comment_density = judged_sound("sound_f", 95, "shortlist_after_rights_review");
+        low_comment_density.representative_view_count = Some(10_000_000);
+        low_comment_density.representative_like_count = Some(1_000_000);
+        low_comment_density.representative_like_rate_per_1000_views = Some(100);
+        low_comment_density.representative_engagement_rate_per_1000_views = Some(134);
+        low_comment_density.representative_comment_count = Some(40_000);
+        low_comment_density.representative_comment_rate_per_1000_views = Some(4);
+        low_comment_density.representative_share_count = Some(300_000);
+        low_comment_density.representative_share_rate_per_1000_views = Some(30);
+        let missing_metrics = judged_sound("sound_g", 95, "shortlist_after_rights_review");
 
         let filtered = filter_judged_sounds(
             vec![
@@ -1185,6 +1223,7 @@ mod tests {
                 low_spread,
                 low_like_density,
                 low_share_density,
+                low_comment_density,
                 missing_metrics,
             ],
             None,
@@ -1201,6 +1240,7 @@ mod tests {
             Some(50),
             Some(100),
             Some(10_000),
+            Some(5),
             Some(100_000),
             Some(25),
             None,
@@ -1228,6 +1268,7 @@ mod tests {
             &[],
             &[],
             &[],
+            None,
             None,
             None,
             None,
@@ -1280,6 +1321,7 @@ mod tests {
             None,
             None,
             None,
+            None,
             &[
                 "representative_view_count".to_string(),
                 "representative_like_count".to_string(),
@@ -1310,6 +1352,7 @@ mod tests {
             &[],
             &[],
             &["RIGHTS STILL NEED".to_string()],
+            None,
             None,
             None,
             None,
@@ -1353,6 +1396,7 @@ mod tests {
             &[],
             &[],
             Some(1),
+            None,
             None,
             None,
             None,
