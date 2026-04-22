@@ -9,9 +9,9 @@ use crate::{
     config::{self, APIFY_CONFIG_ENV, TIKTOK_SOUND_RESOLVER_ACTOR_ID_ENV},
     models::{
         AppReport, AuthReport, DiscoverSource, DiscoveryReport, JudgedSound, LibraryReport,
-        MediaReport, PipelineStep, PipelineStepKind, ReasonCount, RecommendedActionCount,
-        RiskCount, ScoreBandCount, SoundImportReport, SoundJudgementFilters, SoundJudgementReport,
-        SoundJudgementSummary, UpdateReport,
+        MediaReport, PipelineStep, PipelineStepKind, PlatformCount, ReasonCount,
+        RecommendedActionCount, RiskCount, ScoreBandCount, SoundImportReport,
+        SoundJudgementFilters, SoundJudgementReport, SoundJudgementSummary, UpdateReport,
     },
     tiktok::{
         self, DEFAULT_IMPORT_OUTPUT_DIR, ImportTrendingSoundsOptions, LIBRARY_MANIFEST_PATH,
@@ -393,6 +393,9 @@ struct JudgeSoundArgs {
     #[arg(long)]
     max_trend_rank: Option<u32>,
 
+    #[arg(long = "platform")]
+    platforms: Vec<String>,
+
     #[arg(long = "recommended-action")]
     recommended_actions: Vec<String>,
 
@@ -424,6 +427,13 @@ impl JudgeSoundArgs {
             bail!("--max-trend-rank must be greater than 0")
         }
         if self
+            .platforms
+            .iter()
+            .any(|platform| platform.trim().is_empty())
+        {
+            bail!("--platform values must not be empty")
+        }
+        if self
             .recommended_actions
             .iter()
             .any(|action| action.trim().is_empty())
@@ -445,6 +455,7 @@ impl JudgeSoundArgs {
             top: self.top,
             min_score: self.min_score,
             max_trend_rank: self.max_trend_rank,
+            platforms: self.platforms.clone(),
             recommended_actions: self.recommended_actions.clone(),
             excluded_risks: self.excluded_risks.clone(),
             min_downloaded_videos: self.min_downloaded_videos,
@@ -456,6 +467,7 @@ impl JudgeSoundArgs {
             sounds,
             self.min_score,
             self.max_trend_rank,
+            &self.platforms,
             &self.recommended_actions,
             &self.excluded_risks,
             self.min_downloaded_videos,
@@ -482,6 +494,7 @@ impl JudgeSoundArgs {
 
 fn summarize_judged_sounds(sounds: &[JudgedSound]) -> SoundJudgementSummary {
     let mut recommended_action_counts = BTreeMap::new();
+    let mut platform_counts = BTreeMap::new();
     let mut score_band_counts = BTreeMap::new();
     let mut reason_counts = BTreeMap::new();
     let mut risk_counts = BTreeMap::new();
@@ -490,6 +503,7 @@ fn summarize_judged_sounds(sounds: &[JudgedSound]) -> SoundJudgementSummary {
         *recommended_action_counts
             .entry(sound.recommended_action.clone())
             .or_insert(0) += 1;
+        *platform_counts.entry(sound.platform.clone()).or_insert(0) += 1;
         *score_band_counts
             .entry(score_band(sound.score).to_string())
             .or_insert(0) += 1;
@@ -508,6 +522,10 @@ fn summarize_judged_sounds(sounds: &[JudgedSound]) -> SoundJudgementSummary {
                 recommended_action,
                 count,
             })
+            .collect(),
+        platform_counts: platform_counts
+            .into_iter()
+            .map(|(platform, count)| PlatformCount { platform, count })
             .collect(),
         score_band_counts: score_band_counts
             .into_iter()
@@ -537,6 +555,7 @@ fn filter_judged_sounds(
     mut sounds: Vec<JudgedSound>,
     min_score: Option<u32>,
     max_trend_rank: Option<u32>,
+    platforms: &[String],
     recommended_actions: &[String],
     excluded_risks: &[String],
     min_downloaded_videos: Option<usize>,
@@ -551,6 +570,14 @@ fn filter_judged_sounds(
 
     if let Some(max_trend_rank) = max_trend_rank {
         sounds.retain(|sound| sound.trend_rank.is_some_and(|rank| rank <= max_trend_rank));
+    }
+
+    if !platforms.is_empty() {
+        sounds.retain(|sound| {
+            platforms
+                .iter()
+                .any(|platform| sound.platform.eq_ignore_ascii_case(platform.trim()))
+        });
     }
 
     if !recommended_actions.is_empty() {
@@ -719,6 +746,7 @@ mod tests {
             sounds,
             Some(50),
             None,
+            &[],
             &["USE_FIRST".to_string(), "shortlist".to_string()],
             &[],
             None,
@@ -744,6 +772,31 @@ mod tests {
             vec![top_rank, low_rank, missing_rank],
             None,
             Some(10),
+            &[],
+            &[],
+            &[],
+            None,
+            None,
+            None,
+            None,
+            None,
+        );
+
+        assert_eq!(filtered.len(), 1);
+        assert_eq!(filtered[0].sound_id, "sound_a");
+    }
+
+    #[test]
+    fn filter_judged_sounds_applies_platform_filter() {
+        let tiktok_sound = judged_sound("sound_a", 95, "shortlist_after_rights_review");
+        let mut synthetic_sound = judged_sound("sound_b", 95, "shortlist_after_rights_review");
+        synthetic_sound.platform = "synthetic".to_string();
+
+        let filtered = filter_judged_sounds(
+            vec![tiktok_sound, synthetic_sound],
+            None,
+            None,
+            &["TIKTOK".to_string()],
             &[],
             &[],
             None,
@@ -773,6 +826,7 @@ mod tests {
             None,
             &[],
             &[],
+            &[],
             Some(2),
             Some(2),
             None,
@@ -798,6 +852,7 @@ mod tests {
             vec![high_engagement, low_likes, missing_metrics],
             None,
             None,
+            &[],
             &[],
             &[],
             None,
@@ -826,6 +881,7 @@ mod tests {
             vec![rights_risk, metrics_risk],
             None,
             None,
+            &[],
             &[],
             &["RIGHTS STILL NEED".to_string()],
             None,
@@ -876,6 +932,12 @@ mod tests {
         assert!(summary.recommended_action_counts.iter().any(|count| {
             count.recommended_action == "shortlist_after_rights_review" && count.count == 2
         }));
+        assert!(
+            summary
+                .platform_counts
+                .iter()
+                .any(|count| { count.platform == "tiktok" && count.count == 5 })
+        );
         assert!(
             summary
                 .score_band_counts

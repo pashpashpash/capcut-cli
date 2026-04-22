@@ -46,7 +46,7 @@ Add a local judgement/report command over imported sounds before adding more net
 
 ```bash
 capcut-cli library sound judge --manifest library/sounds/manifest.json
-capcut-cli library sound judge --manifest library/sounds/manifest.json --min-score 75 --max-trend-rank 25 --min-downloaded-videos 2 --min-extracted-audios 2 --min-representative-views 1000000 --min-representative-likes 100000 --exclude-risk "Rights still need" --top 3
+capcut-cli library sound judge --manifest library/sounds/manifest.json --platform tiktok --min-score 75 --max-trend-rank 25 --min-downloaded-videos 2 --min-extracted-audios 2 --min-representative-views 1000000 --min-representative-likes 100000 --exclude-risk "Rights still need" --top 3
 ```
 
 The command should be offline and deterministic. It should read the committed manifest plus per-sound metadata and output JSON with:
@@ -55,6 +55,7 @@ The command should be offline and deterministic. It should read the committed ma
 - `trend_rank`
 - `title`
 - `author`
+- `platform`
 - `downloaded_video_count`
 - `extracted_audio_count`
 - `representative_view_count`
@@ -81,6 +82,7 @@ Implemented refinements:
 - judgement summaries now include risk text counts, so risk-filtered runs can show both the returned shortlist risks and the full-library blocker distribution
 - judgement summaries now include reason text counts, so agents can see which positive signals are actually driving a shortlist instead of reading every returned row
 - `--max-trend-rank` filters the judgement report to sounds with recorded chart positions at or above a rank cutoff, making viral-rank passes explicit instead of relying only on score side effects
+- repeated `--platform` filters restrict judgement reports to specific providers such as TikTok, and summary counts now expose the full platform distribution
 
 ## Provider ladder
 

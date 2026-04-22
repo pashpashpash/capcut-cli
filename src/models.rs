@@ -160,6 +160,7 @@ pub struct SoundJudgementFilters {
     pub top: Option<usize>,
     pub min_score: Option<u32>,
     pub max_trend_rank: Option<u32>,
+    pub platforms: Vec<String>,
     pub recommended_actions: Vec<String>,
     pub excluded_risks: Vec<String>,
     pub min_downloaded_videos: Option<usize>,
@@ -171,6 +172,7 @@ pub struct SoundJudgementFilters {
 #[derive(Debug, Serialize)]
 pub struct SoundJudgementSummary {
     pub recommended_action_counts: Vec<RecommendedActionCount>,
+    pub platform_counts: Vec<PlatformCount>,
     pub score_band_counts: Vec<ScoreBandCount>,
     pub reason_counts: Vec<ReasonCount>,
     pub risk_counts: Vec<RiskCount>,
@@ -179,6 +181,12 @@ pub struct SoundJudgementSummary {
 #[derive(Debug, Serialize)]
 pub struct RecommendedActionCount {
     pub recommended_action: String,
+    pub count: usize,
+}
+
+#[derive(Debug, Serialize)]
+pub struct PlatformCount {
+    pub platform: String,
     pub count: usize,
 }
 
