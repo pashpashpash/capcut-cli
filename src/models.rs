@@ -193,6 +193,7 @@ pub struct SoundJudgementSummary {
     pub representative_like_rate_band_counts: Vec<RepresentativeLikeRateBandCount>,
     pub representative_engagement_rate_band_counts: Vec<RepresentativeEngagementRateBandCount>,
     pub representative_comment_rate_band_counts: Vec<RepresentativeCommentRateBandCount>,
+    pub representative_share_rate_band_counts: Vec<RepresentativeShareRateBandCount>,
     pub missing_engagement_metric_field_counts: Vec<MissingEngagementMetricFieldCount>,
     pub reason_counts: Vec<ReasonCount>,
     pub risk_counts: Vec<RiskCount>,
@@ -248,6 +249,12 @@ pub struct RepresentativeEngagementRateBandCount {
 
 #[derive(Debug, Serialize)]
 pub struct RepresentativeCommentRateBandCount {
+    pub band: String,
+    pub count: usize,
+}
+
+#[derive(Debug, Serialize)]
+pub struct RepresentativeShareRateBandCount {
     pub band: String,
     pub count: usize,
 }
