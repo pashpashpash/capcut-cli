@@ -591,6 +591,14 @@ fn judge_manifest_entry(manifest_path: &Path, entry: &ManifestEntry) -> Result<J
     });
     let representative_like_rate_per_1000_views =
         rate_per_1000(representative_like_count, representative_view_count);
+    let representative_engagement_rate_per_1000_views = rate_sum_per_1000(
+        &[
+            representative_like_count,
+            representative_comment_count,
+            representative_share_count,
+        ],
+        representative_view_count,
+    );
     let representative_engagement_metrics = [
         (
             "representative_view_count",
@@ -707,6 +715,7 @@ fn judge_manifest_entry(manifest_path: &Path, entry: &ManifestEntry) -> Result<J
         representative_view_count,
         representative_like_count,
         representative_like_rate_per_1000_views,
+        representative_engagement_rate_per_1000_views,
         representative_comment_count,
         representative_share_count,
         representative_engagement_metric_count,
@@ -1657,13 +1666,23 @@ fn threshold_score(value: u64, thresholds: &[(u64, u32)]) -> u32 {
 }
 
 fn rate_per_1000(numerator: Option<u64>, denominator: Option<u64>) -> Option<u64> {
-    let numerator = u128::from(numerator?);
+    rate_sum_per_1000(&[numerator], denominator)
+}
+
+fn rate_sum_per_1000(numerators: &[Option<u64>], denominator: Option<u64>) -> Option<u64> {
     let denominator = u128::from(denominator?);
     if denominator == 0 {
         return None;
     }
 
-    u64::try_from((numerator * 1_000) / denominator).ok()
+    let mut total = 0_u128;
+    let mut has_numerator = false;
+    for numerator in numerators.iter().flatten() {
+        total += u128::from(*numerator);
+        has_numerator = true;
+    }
+
+    has_numerator.then(|| u64::try_from((total * 1_000) / denominator).ok())?
 }
 
 fn recommended_action(score: u32, risks: &[String]) -> &'static str {
@@ -1868,6 +1887,7 @@ mod tests {
             representative_view_count: None,
             representative_like_count: None,
             representative_like_rate_per_1000_views: None,
+            representative_engagement_rate_per_1000_views: None,
             representative_comment_count: None,
             representative_share_count: None,
             representative_engagement_metric_count: 0,
@@ -1952,6 +1972,10 @@ mod tests {
         assert_eq!(judged.score, 100);
         assert_eq!(judged.recommended_action, "shortlist_after_rights_review");
         assert_eq!(judged.representative_like_rate_per_1000_views, Some(83));
+        assert_eq!(
+            judged.representative_engagement_rate_per_1000_views,
+            Some(86)
+        );
         assert_eq!(judged.representative_engagement_metric_count, 4);
         assert_eq!(
             judged.representative_engagement_metric_fields,
@@ -2050,6 +2074,10 @@ mod tests {
         assert_eq!(judged.representative_view_count, Some(37_548_076));
         assert_eq!(judged.representative_like_count, Some(7_427_697));
         assert_eq!(judged.representative_like_rate_per_1000_views, Some(197));
+        assert_eq!(
+            judged.representative_engagement_rate_per_1000_views,
+            Some(235)
+        );
         assert_eq!(judged.representative_comment_count, Some(51_294));
         assert_eq!(judged.representative_share_count, Some(1_375_712));
         assert_eq!(judged.representative_engagement_metric_count, 4);

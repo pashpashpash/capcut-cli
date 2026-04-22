@@ -46,7 +46,7 @@ Add a local judgement/report command over imported sounds before adding more net
 
 ```bash
 capcut-cli library sound judge --manifest library/sounds/manifest.json
-capcut-cli library sound judge --manifest library/sounds/manifest.json --platform tiktok --require-reason "downloaded candidate" --min-score 75 --max-trend-rank 25 --min-downloaded-videos 2 --min-extracted-audios 2 --min-representative-engagement-metrics 2 --require-engagement-metric-field representative_view_count --require-engagement-metric-field representative_like_count --min-representative-views 1000000 --min-representative-likes 100000 --min-representative-like-rate-per-1000-views 50 --min-representative-comments 10000 --min-representative-shares 10000 --exclude-risk "Rights still need" --max-risk-count 1 --top 3
+capcut-cli library sound judge --manifest library/sounds/manifest.json --platform tiktok --require-reason "downloaded candidate" --min-score 75 --max-trend-rank 25 --min-downloaded-videos 2 --min-extracted-audios 2 --min-representative-engagement-metrics 2 --require-engagement-metric-field representative_view_count --require-engagement-metric-field representative_like_count --min-representative-views 1000000 --min-representative-likes 100000 --min-representative-like-rate-per-1000-views 50 --min-representative-engagement-rate-per-1000-views 75 --min-representative-comments 10000 --min-representative-shares 10000 --exclude-risk "Rights still need" --max-risk-count 1 --top 3
 ```
 
 The command should be offline and deterministic. It should read the committed manifest plus per-sound metadata and output JSON with:
@@ -61,6 +61,7 @@ The command should be offline and deterministic. It should read the committed ma
 - `representative_view_count`
 - `representative_like_count`
 - `representative_like_rate_per_1000_views`
+- `representative_engagement_rate_per_1000_views`
 - `representative_comment_count`
 - `representative_share_count`
 - `score`
@@ -77,6 +78,7 @@ Implemented refinements:
 - `--min-downloaded-videos` and `--min-extracted-audios` let the shortlist require enough usable local material for editing, which keeps "viral but unusable" sounds out of production-oriented passes
 - `--min-representative-views`, `--min-representative-likes`, `--min-representative-comments`, and `--min-representative-shares` let the shortlist require direct engagement, discussion, and spread evidence instead of trusting chart rank alone
 - returned sounds include `representative_like_rate_per_1000_views`, and `--min-representative-like-rate-per-1000-views` lets viral shortlists require like density relative to reach instead of raw like counts alone
+- returned sounds include `representative_engagement_rate_per_1000_views`, and `--min-representative-engagement-rate-per-1000-views` lets shortlists require total likes, comments, and shares density relative to reach
 - judgement reports echo the applied `filters` next to `total_count`, `judged_count`, and `summary`, so zero-result shortlists remain explainable without reconstructing CLI flags from shell history
 - `filtered_out_count` makes zero-result or narrow-result reports explicit about how many sounds were removed by the filters
 - `filtered_summary` summarizes the returned shortlist separately from the full-library `summary`, which makes narrow passes easier to inspect without re-counting rows
