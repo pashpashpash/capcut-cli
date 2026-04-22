@@ -589,6 +589,8 @@ fn judge_manifest_entry(manifest_path: &Path, entry: &ManifestEntry) -> Result<J
         )
         .or(representative_post_engagement.share_count)
     });
+    let representative_like_rate_per_1000_views =
+        rate_per_1000(representative_like_count, representative_view_count);
     let representative_engagement_metrics = [
         (
             "representative_view_count",
@@ -704,6 +706,7 @@ fn judge_manifest_entry(manifest_path: &Path, entry: &ManifestEntry) -> Result<J
         extracted_audio_count,
         representative_view_count,
         representative_like_count,
+        representative_like_rate_per_1000_views,
         representative_comment_count,
         representative_share_count,
         representative_engagement_metric_count,
@@ -1653,6 +1656,16 @@ fn threshold_score(value: u64, thresholds: &[(u64, u32)]) -> u32 {
         .unwrap_or_default()
 }
 
+fn rate_per_1000(numerator: Option<u64>, denominator: Option<u64>) -> Option<u64> {
+    let numerator = u128::from(numerator?);
+    let denominator = u128::from(denominator?);
+    if denominator == 0 {
+        return None;
+    }
+
+    u64::try_from((numerator * 1_000) / denominator).ok()
+}
+
 fn recommended_action(score: u32, risks: &[String]) -> &'static str {
     let rights_review_needed = risks
         .iter()
@@ -1854,6 +1867,7 @@ mod tests {
             extracted_audio_count: Some(1),
             representative_view_count: None,
             representative_like_count: None,
+            representative_like_rate_per_1000_views: None,
             representative_comment_count: None,
             representative_share_count: None,
             representative_engagement_metric_count: 0,
@@ -1937,6 +1951,7 @@ mod tests {
 
         assert_eq!(judged.score, 100);
         assert_eq!(judged.recommended_action, "shortlist_after_rights_review");
+        assert_eq!(judged.representative_like_rate_per_1000_views, Some(83));
         assert_eq!(judged.representative_engagement_metric_count, 4);
         assert_eq!(
             judged.representative_engagement_metric_fields,
@@ -2034,6 +2049,7 @@ mod tests {
 
         assert_eq!(judged.representative_view_count, Some(37_548_076));
         assert_eq!(judged.representative_like_count, Some(7_427_697));
+        assert_eq!(judged.representative_like_rate_per_1000_views, Some(197));
         assert_eq!(judged.representative_comment_count, Some(51_294));
         assert_eq!(judged.representative_share_count, Some(1_375_712));
         assert_eq!(judged.representative_engagement_metric_count, 4);

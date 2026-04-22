@@ -430,6 +430,9 @@ struct JudgeSoundArgs {
     min_representative_likes: Option<u64>,
 
     #[arg(long)]
+    min_representative_like_rate_per_1000_views: Option<u64>,
+
+    #[arg(long)]
     min_representative_comments: Option<u64>,
 
     #[arg(long)]
@@ -522,6 +525,8 @@ impl JudgeSoundArgs {
             min_extracted_audios: self.min_extracted_audios,
             min_representative_views: self.min_representative_views,
             min_representative_likes: self.min_representative_likes,
+            min_representative_like_rate_per_1000_views: self
+                .min_representative_like_rate_per_1000_views,
             min_representative_comments: self.min_representative_comments,
             min_representative_shares: self.min_representative_shares,
             min_representative_engagement_metrics: self.min_representative_engagement_metrics,
@@ -540,6 +545,7 @@ impl JudgeSoundArgs {
             self.min_extracted_audios,
             self.min_representative_views,
             self.min_representative_likes,
+            self.min_representative_like_rate_per_1000_views,
             self.min_representative_comments,
             self.min_representative_shares,
             self.min_representative_engagement_metrics,
@@ -658,6 +664,7 @@ fn filter_judged_sounds(
     min_extracted_audios: Option<usize>,
     min_representative_views: Option<u64>,
     min_representative_likes: Option<u64>,
+    min_representative_like_rate_per_1000_views: Option<u64>,
     min_representative_comments: Option<u64>,
     min_representative_shares: Option<u64>,
     min_representative_engagement_metrics: Option<usize>,
@@ -726,6 +733,17 @@ fn filter_judged_sounds(
     if let Some(min_representative_likes) = min_representative_likes {
         sounds.retain(|sound| {
             sound.representative_like_count.unwrap_or_default() >= min_representative_likes
+        });
+    }
+
+    if let Some(min_representative_like_rate_per_1000_views) =
+        min_representative_like_rate_per_1000_views
+    {
+        sounds.retain(|sound| {
+            sound
+                .representative_like_rate_per_1000_views
+                .unwrap_or_default()
+                >= min_representative_like_rate_per_1000_views
         });
     }
 
@@ -878,6 +896,7 @@ mod tests {
             extracted_audio_count: Some(1),
             representative_view_count: None,
             representative_like_count: None,
+            representative_like_rate_per_1000_views: None,
             representative_comment_count: None,
             representative_share_count: None,
             representative_engagement_metric_count: 0,
@@ -909,6 +928,7 @@ mod tests {
             &[],
             &["USE_FIRST".to_string(), "shortlist".to_string()],
             &[],
+            None,
             None,
             None,
             None,
@@ -949,6 +969,7 @@ mod tests {
             None,
             None,
             None,
+            None,
             &[],
             None,
         );
@@ -971,6 +992,7 @@ mod tests {
             &[],
             &[],
             &[],
+            None,
             None,
             None,
             None,
@@ -1020,6 +1042,7 @@ mod tests {
             None,
             None,
             None,
+            None,
             &[],
             None,
         );
@@ -1054,6 +1077,7 @@ mod tests {
             None,
             None,
             None,
+            None,
             &[],
             None,
         );
@@ -1067,22 +1091,37 @@ mod tests {
         let mut high_engagement = judged_sound("sound_a", 95, "shortlist_after_rights_review");
         high_engagement.representative_view_count = Some(2_000_000);
         high_engagement.representative_like_count = Some(150_000);
+        high_engagement.representative_like_rate_per_1000_views = Some(75);
         high_engagement.representative_comment_count = Some(15_000);
         high_engagement.representative_share_count = Some(120_000);
         let mut low_discussion = judged_sound("sound_b", 95, "shortlist_after_rights_review");
         low_discussion.representative_view_count = Some(2_000_000);
         low_discussion.representative_like_count = Some(150_000);
+        low_discussion.representative_like_rate_per_1000_views = Some(75);
         low_discussion.representative_comment_count = Some(5_000);
         low_discussion.representative_share_count = Some(120_000);
         let mut low_spread = judged_sound("sound_c", 95, "shortlist_after_rights_review");
         low_spread.representative_view_count = Some(2_000_000);
         low_spread.representative_like_count = Some(150_000);
+        low_spread.representative_like_rate_per_1000_views = Some(75);
         low_spread.representative_comment_count = Some(15_000);
         low_spread.representative_share_count = Some(5_000);
-        let missing_metrics = judged_sound("sound_d", 95, "shortlist_after_rights_review");
+        let mut low_like_density = judged_sound("sound_d", 95, "shortlist_after_rights_review");
+        low_like_density.representative_view_count = Some(10_000_000);
+        low_like_density.representative_like_count = Some(150_000);
+        low_like_density.representative_like_rate_per_1000_views = Some(15);
+        low_like_density.representative_comment_count = Some(15_000);
+        low_like_density.representative_share_count = Some(120_000);
+        let missing_metrics = judged_sound("sound_e", 95, "shortlist_after_rights_review");
 
         let filtered = filter_judged_sounds(
-            vec![high_engagement, low_discussion, low_spread, missing_metrics],
+            vec![
+                high_engagement,
+                low_discussion,
+                low_spread,
+                low_like_density,
+                missing_metrics,
+            ],
             None,
             None,
             &[],
@@ -1094,6 +1133,7 @@ mod tests {
             None,
             Some(1_000_000),
             Some(100_000),
+            Some(50),
             Some(10_000),
             Some(100_000),
             None,
@@ -1121,6 +1161,7 @@ mod tests {
             &[],
             &[],
             &[],
+            None,
             None,
             None,
             None,
@@ -1167,6 +1208,7 @@ mod tests {
             None,
             None,
             None,
+            None,
             &[
                 "representative_view_count".to_string(),
                 "representative_like_count".to_string(),
@@ -1197,6 +1239,7 @@ mod tests {
             &[],
             &[],
             &["RIGHTS STILL NEED".to_string()],
+            None,
             None,
             None,
             None,
@@ -1237,6 +1280,7 @@ mod tests {
             &[],
             &[],
             Some(1),
+            None,
             None,
             None,
             None,
