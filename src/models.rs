@@ -160,6 +160,7 @@ pub struct SoundJudgementFilters {
     pub top: Option<usize>,
     pub min_score: Option<u32>,
     pub recommended_actions: Vec<String>,
+    pub excluded_risks: Vec<String>,
     pub min_downloaded_videos: Option<usize>,
     pub min_extracted_audios: Option<usize>,
     pub min_representative_views: Option<u64>,

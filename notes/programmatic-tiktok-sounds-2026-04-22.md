@@ -46,7 +46,7 @@ Add a local judgement/report command over imported sounds before adding more net
 
 ```bash
 capcut-cli library sound judge --manifest library/sounds/manifest.json
-capcut-cli library sound judge --manifest library/sounds/manifest.json --min-score 75 --min-downloaded-videos 2 --min-extracted-audios 2 --min-representative-views 1000000 --min-representative-likes 100000 --top 3
+capcut-cli library sound judge --manifest library/sounds/manifest.json --min-score 75 --min-downloaded-videos 2 --min-extracted-audios 2 --min-representative-views 1000000 --min-representative-likes 100000 --exclude-risk "Rights still need" --top 3
 ```
 
 The command should be offline and deterministic. It should read the committed manifest plus per-sound metadata and output JSON with:
@@ -77,6 +77,7 @@ Implemented refinements:
 - judgement reports echo the applied `filters` next to `total_count`, `judged_count`, and `summary`, so zero-result shortlists remain explainable without reconstructing CLI flags from shell history
 - `filtered_out_count` makes zero-result or narrow-result reports explicit about how many sounds were removed by the filters
 - `filtered_summary` summarizes the returned shortlist separately from the full-library `summary`, which makes narrow passes easier to inspect without re-counting rows
+- repeated `--exclude-risk` filters remove sounds whose risk text contains a matching substring, allowing production-oriented passes to drop known blockers such as unresolved rights review
 
 ## Provider ladder
 

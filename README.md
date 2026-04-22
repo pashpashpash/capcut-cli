@@ -129,12 +129,12 @@ cargo run -- library sound judge
 Surface only the strongest candidates:
 
 ```bash
-cargo run -- library sound judge --min-score 75 --min-downloaded-videos 2 --min-extracted-audios 2 --min-representative-views 1000000 --min-representative-likes 100000 --recommended-action shortlist_after_rights_review --top 3
+cargo run -- library sound judge --min-score 75 --min-downloaded-videos 2 --min-extracted-audios 2 --min-representative-views 1000000 --min-representative-likes 100000 --recommended-action shortlist_after_rights_review --exclude-risk "Rights still need" --top 3
 ```
 
 The report scores each sound using recorded trend rank, downloaded/extracted asset coverage, representative engagement metrics when present, and provenance/rights risks. This is the deterministic "what deserves attention, and why?" pass before importing or composing more assets.
 
-Filtered reports keep `total_count`, `judged_count`, `filtered_out_count`, echo the applied `filters`, and include both full-library `summary` and returned-row `filtered_summary` counts, so agents can see the whole library distribution while only receiving the shortlist rows they asked for. Use `--min-downloaded-videos` and `--min-extracted-audios` when a candidate needs enough local material for editing, not just a high score. Use `--min-representative-views` and `--min-representative-likes` when the shortlist should require direct engagement evidence.
+Filtered reports keep `total_count`, `judged_count`, `filtered_out_count`, echo the applied `filters`, and include both full-library `summary` and returned-row `filtered_summary` counts, so agents can see the whole library distribution while only receiving the shortlist rows they asked for. Use `--min-downloaded-videos` and `--min-extracted-audios` when a candidate needs enough local material for editing, not just a high score. Use `--min-representative-views` and `--min-representative-likes` when the shortlist should require direct engagement evidence. Use repeated `--exclude-risk` substrings to drop candidates with known blockers such as rights-review risk.
 
 ## Output layout
 

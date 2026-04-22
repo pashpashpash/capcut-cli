@@ -393,6 +393,9 @@ struct JudgeSoundArgs {
     #[arg(long = "recommended-action")]
     recommended_actions: Vec<String>,
 
+    #[arg(long = "exclude-risk")]
+    excluded_risks: Vec<String>,
+
     #[arg(long)]
     min_downloaded_videos: Option<usize>,
 
@@ -421,6 +424,13 @@ impl JudgeSoundArgs {
         {
             bail!("--recommended-action values must not be empty")
         }
+        if self
+            .excluded_risks
+            .iter()
+            .any(|risk| risk.trim().is_empty())
+        {
+            bail!("--exclude-risk values must not be empty")
+        }
 
         let sounds = tiktok::judge_sound_library(&self.manifest)?;
         let total_count = sounds.len();
@@ -429,6 +439,7 @@ impl JudgeSoundArgs {
             top: self.top,
             min_score: self.min_score,
             recommended_actions: self.recommended_actions.clone(),
+            excluded_risks: self.excluded_risks.clone(),
             min_downloaded_videos: self.min_downloaded_videos,
             min_extracted_audios: self.min_extracted_audios,
             min_representative_views: self.min_representative_views,
@@ -438,6 +449,7 @@ impl JudgeSoundArgs {
             sounds,
             self.min_score,
             &self.recommended_actions,
+            &self.excluded_risks,
             self.min_downloaded_videos,
             self.min_extracted_audios,
             self.min_representative_views,
@@ -501,6 +513,7 @@ fn filter_judged_sounds(
     mut sounds: Vec<JudgedSound>,
     min_score: Option<u32>,
     recommended_actions: &[String],
+    excluded_risks: &[String],
     min_downloaded_videos: Option<usize>,
     min_extracted_audios: Option<usize>,
     min_representative_views: Option<u64>,
@@ -516,6 +529,15 @@ fn filter_judged_sounds(
             recommended_actions
                 .iter()
                 .any(|action| sound.recommended_action.eq_ignore_ascii_case(action.trim()))
+        });
+    }
+
+    if !excluded_risks.is_empty() {
+        sounds.retain(|sound| {
+            !sound
+                .risks
+                .iter()
+                .any(|risk| matches_any_excluded_risk(risk, excluded_risks))
         });
     }
 
@@ -548,6 +570,13 @@ fn filter_judged_sounds(
     }
 
     sounds
+}
+
+fn matches_any_excluded_risk(risk: &str, excluded_risks: &[String]) -> bool {
+    let risk = risk.to_ascii_lowercase();
+    excluded_risks
+        .iter()
+        .any(|excluded| risk.contains(&excluded.trim().to_ascii_lowercase()))
 }
 
 #[derive(Debug, Args)]
@@ -661,6 +690,7 @@ mod tests {
             sounds,
             Some(50),
             &["USE_FIRST".to_string(), "shortlist".to_string()],
+            &[],
             None,
             None,
             None,
@@ -685,6 +715,7 @@ mod tests {
         let filtered = filter_judged_sounds(
             vec![strong_asset, weak_asset, missing_counts],
             None,
+            &[],
             &[],
             Some(2),
             Some(2),
@@ -711,6 +742,7 @@ mod tests {
             vec![high_engagement, low_likes, missing_metrics],
             None,
             &[],
+            &[],
             None,
             None,
             Some(1_000_000),
@@ -720,6 +752,33 @@ mod tests {
 
         assert_eq!(filtered.len(), 1);
         assert_eq!(filtered[0].sound_id, "sound_a");
+    }
+
+    #[test]
+    fn filter_judged_sounds_excludes_matching_risks() {
+        let mut rights_risk = judged_sound("sound_a", 95, "shortlist_after_rights_review");
+        rights_risk
+            .risks
+            .push("Rights still need manual verification before production use".to_string());
+        let mut metrics_risk = judged_sound("sound_b", 95, "shortlist_after_rights_review");
+        metrics_risk
+            .risks
+            .push("No representative engagement metrics are recorded".to_string());
+
+        let filtered = filter_judged_sounds(
+            vec![rights_risk, metrics_risk],
+            None,
+            &[],
+            &["RIGHTS STILL NEED".to_string()],
+            None,
+            None,
+            None,
+            None,
+            None,
+        );
+
+        assert_eq!(filtered.len(), 1);
+        assert_eq!(filtered[0].sound_id, "sound_b");
     }
 
     #[test]
