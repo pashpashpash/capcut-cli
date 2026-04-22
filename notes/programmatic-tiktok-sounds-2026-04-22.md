@@ -46,7 +46,7 @@ Add a local judgement/report command over imported sounds before adding more net
 
 ```bash
 capcut-cli library sound judge --manifest library/sounds/manifest.json
-capcut-cli library sound judge --manifest library/sounds/manifest.json --platform tiktok --require-reason "downloaded candidate" --min-score 75 --max-trend-rank 25 --min-downloaded-videos 2 --min-extracted-audios 2 --min-representative-engagement-metrics 2 --require-engagement-metric-field representative_view_count --require-engagement-metric-field representative_like_count --min-representative-views 1000000 --min-representative-likes 100000 --exclude-risk "Rights still need" --max-risk-count 1 --top 3
+capcut-cli library sound judge --manifest library/sounds/manifest.json --platform tiktok --require-reason "downloaded candidate" --min-score 75 --max-trend-rank 25 --min-downloaded-videos 2 --min-extracted-audios 2 --min-representative-engagement-metrics 2 --require-engagement-metric-field representative_view_count --require-engagement-metric-field representative_like_count --min-representative-views 1000000 --min-representative-likes 100000 --min-representative-comments 10000 --min-representative-shares 10000 --exclude-risk "Rights still need" --max-risk-count 1 --top 3
 ```
 
 The command should be offline and deterministic. It should read the committed manifest plus per-sound metadata and output JSON with:
@@ -74,7 +74,7 @@ Implemented refinements:
 - the judgement command now supports `--min-score`, repeated `--recommended-action`, and `--top`, so an agent can ask for a shortlist directly without post-processing the JSON dump
 - filtered judgement reports keep an overall summary with recommendation-action and score-band counts, so the shortlist does not hide the shape of the full local library
 - `--min-downloaded-videos` and `--min-extracted-audios` let the shortlist require enough usable local material for editing, which keeps "viral but unusable" sounds out of production-oriented passes
-- `--min-representative-views` and `--min-representative-likes` let the shortlist require direct engagement evidence instead of trusting chart rank alone
+- `--min-representative-views`, `--min-representative-likes`, `--min-representative-comments`, and `--min-representative-shares` let the shortlist require direct engagement, discussion, and spread evidence instead of trusting chart rank alone
 - judgement reports echo the applied `filters` next to `total_count`, `judged_count`, and `summary`, so zero-result shortlists remain explainable without reconstructing CLI flags from shell history
 - `filtered_out_count` makes zero-result or narrow-result reports explicit about how many sounds were removed by the filters
 - `filtered_summary` summarizes the returned shortlist separately from the full-library `summary`, which makes narrow passes easier to inspect without re-counting rows

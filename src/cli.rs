@@ -430,6 +430,12 @@ struct JudgeSoundArgs {
     min_representative_likes: Option<u64>,
 
     #[arg(long)]
+    min_representative_comments: Option<u64>,
+
+    #[arg(long)]
+    min_representative_shares: Option<u64>,
+
+    #[arg(long)]
     min_representative_engagement_metrics: Option<usize>,
 
     #[arg(long = "require-engagement-metric-field")]
@@ -516,6 +522,8 @@ impl JudgeSoundArgs {
             min_extracted_audios: self.min_extracted_audios,
             min_representative_views: self.min_representative_views,
             min_representative_likes: self.min_representative_likes,
+            min_representative_comments: self.min_representative_comments,
+            min_representative_shares: self.min_representative_shares,
             min_representative_engagement_metrics: self.min_representative_engagement_metrics,
             required_engagement_metric_fields: self.required_engagement_metric_fields.clone(),
         };
@@ -532,6 +540,8 @@ impl JudgeSoundArgs {
             self.min_extracted_audios,
             self.min_representative_views,
             self.min_representative_likes,
+            self.min_representative_comments,
+            self.min_representative_shares,
             self.min_representative_engagement_metrics,
             &self.required_engagement_metric_fields,
             self.top,
@@ -648,6 +658,8 @@ fn filter_judged_sounds(
     min_extracted_audios: Option<usize>,
     min_representative_views: Option<u64>,
     min_representative_likes: Option<u64>,
+    min_representative_comments: Option<u64>,
+    min_representative_shares: Option<u64>,
     min_representative_engagement_metrics: Option<usize>,
     required_engagement_metric_fields: &[String],
     top: Option<usize>,
@@ -714,6 +726,18 @@ fn filter_judged_sounds(
     if let Some(min_representative_likes) = min_representative_likes {
         sounds.retain(|sound| {
             sound.representative_like_count.unwrap_or_default() >= min_representative_likes
+        });
+    }
+
+    if let Some(min_representative_comments) = min_representative_comments {
+        sounds.retain(|sound| {
+            sound.representative_comment_count.unwrap_or_default() >= min_representative_comments
+        });
+    }
+
+    if let Some(min_representative_shares) = min_representative_shares {
+        sounds.retain(|sound| {
+            sound.representative_share_count.unwrap_or_default() >= min_representative_shares
         });
     }
 
@@ -891,6 +915,8 @@ mod tests {
             None,
             None,
             None,
+            None,
+            None,
             &[],
             Some(1),
         );
@@ -921,6 +947,8 @@ mod tests {
             None,
             None,
             None,
+            None,
+            None,
             &[],
             None,
         );
@@ -943,6 +971,8 @@ mod tests {
             &[],
             &[],
             &[],
+            None,
+            None,
             None,
             None,
             None,
@@ -988,6 +1018,8 @@ mod tests {
             None,
             None,
             None,
+            None,
+            None,
             &[],
             None,
         );
@@ -1020,6 +1052,8 @@ mod tests {
             None,
             None,
             None,
+            None,
+            None,
             &[],
             None,
         );
@@ -1033,13 +1067,22 @@ mod tests {
         let mut high_engagement = judged_sound("sound_a", 95, "shortlist_after_rights_review");
         high_engagement.representative_view_count = Some(2_000_000);
         high_engagement.representative_like_count = Some(150_000);
-        let mut low_likes = judged_sound("sound_b", 95, "shortlist_after_rights_review");
-        low_likes.representative_view_count = Some(2_000_000);
-        low_likes.representative_like_count = Some(25_000);
-        let missing_metrics = judged_sound("sound_c", 95, "shortlist_after_rights_review");
+        high_engagement.representative_comment_count = Some(15_000);
+        high_engagement.representative_share_count = Some(120_000);
+        let mut low_discussion = judged_sound("sound_b", 95, "shortlist_after_rights_review");
+        low_discussion.representative_view_count = Some(2_000_000);
+        low_discussion.representative_like_count = Some(150_000);
+        low_discussion.representative_comment_count = Some(5_000);
+        low_discussion.representative_share_count = Some(120_000);
+        let mut low_spread = judged_sound("sound_c", 95, "shortlist_after_rights_review");
+        low_spread.representative_view_count = Some(2_000_000);
+        low_spread.representative_like_count = Some(150_000);
+        low_spread.representative_comment_count = Some(15_000);
+        low_spread.representative_share_count = Some(5_000);
+        let missing_metrics = judged_sound("sound_d", 95, "shortlist_after_rights_review");
 
         let filtered = filter_judged_sounds(
-            vec![high_engagement, low_likes, missing_metrics],
+            vec![high_engagement, low_discussion, low_spread, missing_metrics],
             None,
             None,
             &[],
@@ -1050,6 +1093,8 @@ mod tests {
             None,
             None,
             Some(1_000_000),
+            Some(100_000),
+            Some(10_000),
             Some(100_000),
             None,
             &[],
@@ -1076,6 +1121,8 @@ mod tests {
             &[],
             &[],
             &[],
+            None,
+            None,
             None,
             None,
             None,
@@ -1118,6 +1165,8 @@ mod tests {
             None,
             None,
             None,
+            None,
+            None,
             &[
                 "representative_view_count".to_string(),
                 "representative_like_count".to_string(),
@@ -1148,6 +1197,8 @@ mod tests {
             &[],
             &[],
             &["RIGHTS STILL NEED".to_string()],
+            None,
+            None,
             None,
             None,
             None,
@@ -1186,6 +1237,8 @@ mod tests {
             &[],
             &[],
             Some(1),
+            None,
+            None,
             None,
             None,
             None,

@@ -170,6 +170,8 @@ pub struct SoundJudgementFilters {
     pub min_extracted_audios: Option<usize>,
     pub min_representative_views: Option<u64>,
     pub min_representative_likes: Option<u64>,
+    pub min_representative_comments: Option<u64>,
+    pub min_representative_shares: Option<u64>,
     pub min_representative_engagement_metrics: Option<usize>,
     pub required_engagement_metric_fields: Vec<String>,
 }
