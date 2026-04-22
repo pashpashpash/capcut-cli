@@ -15,11 +15,12 @@ use crate::{
         PipelineStep, PipelineStepKind, PlatformCount, ReasonCount, ReasonCountCoverageCount,
         RecommendedActionCount, RepresentativeCommentCountBandCount,
         RepresentativeCommentRateBandCount, RepresentativeEngagementCountBandCount,
-        RepresentativeEngagementRateBandCount, RepresentativeLikeCountBandCount,
-        RepresentativeLikeRateBandCount, RepresentativeShareCountBandCount,
-        RepresentativeShareRateBandCount, RepresentativeViewCountBandCount, RiskCount,
-        RiskCountCoverageCount, ScoreBandCount, SoundImportReport, SoundJudgementFilters,
-        SoundJudgementReport, SoundJudgementSummary, UpdateReport, UsableAssetPairCoverageCount,
+        RepresentativeEngagementMetricFieldCount, RepresentativeEngagementRateBandCount,
+        RepresentativeLikeCountBandCount, RepresentativeLikeRateBandCount,
+        RepresentativeShareCountBandCount, RepresentativeShareRateBandCount,
+        RepresentativeViewCountBandCount, RiskCount, RiskCountCoverageCount, ScoreBandCount,
+        SoundImportReport, SoundJudgementFilters, SoundJudgementReport, SoundJudgementSummary,
+        UpdateReport, UsableAssetPairCoverageCount,
     },
     tiktok::{
         self, DEFAULT_IMPORT_OUTPUT_DIR, ImportTrendingSoundsOptions, LIBRARY_MANIFEST_PATH,
@@ -684,6 +685,7 @@ fn summarize_judged_sounds(sounds: &[JudgedSound]) -> SoundJudgementSummary {
     let mut local_artifact_path_coverage_counts = BTreeMap::new();
     let mut local_artifact_path_field_counts = BTreeMap::new();
     let mut engagement_metric_coverage_counts = BTreeMap::new();
+    let mut representative_engagement_metric_field_counts = BTreeMap::new();
     let mut representative_view_count_band_counts = BTreeMap::new();
     let mut representative_engagement_count_band_counts = BTreeMap::new();
     let mut representative_like_count_band_counts = BTreeMap::new();
@@ -735,6 +737,11 @@ fn summarize_judged_sounds(sounds: &[JudgedSound]) -> SoundJudgementSummary {
         *engagement_metric_coverage_counts
             .entry(sound.representative_engagement_metric_count)
             .or_insert(0) += 1;
+        for field in &sound.representative_engagement_metric_fields {
+            *representative_engagement_metric_field_counts
+                .entry(field.clone())
+                .or_insert(0) += 1;
+        }
         *representative_view_count_band_counts
             .entry(representative_view_count_band(
                 sound.representative_view_count,
@@ -881,6 +888,11 @@ fn summarize_judged_sounds(sounds: &[JudgedSound]) -> SoundJudgementSummary {
                 },
             )
             .collect(),
+        representative_engagement_metric_field_counts:
+            representative_engagement_metric_field_counts
+                .into_iter()
+                .map(|(field, count)| RepresentativeEngagementMetricFieldCount { field, count })
+                .collect(),
         representative_view_count_band_counts: representative_view_count_band_counts
             .into_iter()
             .map(|(band, count)| RepresentativeViewCountBandCount {
@@ -2136,6 +2148,12 @@ mod tests {
         rights_risk.representative_comment_rate_per_1000_views = Some(7);
         rights_risk.representative_share_rate_per_1000_views = Some(36);
         rights_risk.representative_engagement_metric_count = 4;
+        rights_risk.representative_engagement_metric_fields = vec![
+            "representative_view_count".to_string(),
+            "representative_like_count".to_string(),
+            "representative_comment_count".to_string(),
+            "representative_share_count".to_string(),
+        ];
         rights_risk
             .reasons
             .push("Top 10 trend rank is recorded".to_string());
@@ -2157,6 +2175,10 @@ mod tests {
         metrics_risk.representative_comment_rate_per_1000_views = Some(2);
         metrics_risk.representative_share_rate_per_1000_views = Some(12);
         metrics_risk.representative_engagement_metric_count = 2;
+        metrics_risk.representative_engagement_metric_fields = vec![
+            "representative_view_count".to_string(),
+            "representative_like_count".to_string(),
+        ];
         metrics_risk.missing_representative_engagement_metric_fields = vec![
             "representative_comment_count".to_string(),
             "representative_share_count".to_string(),
@@ -2474,6 +2496,30 @@ mod tests {
                 .any(|count| {
                     count.representative_engagement_metric_count == 4 && count.count == 1
                 })
+        );
+        assert!(
+            summary
+                .representative_engagement_metric_field_counts
+                .iter()
+                .any(|count| { count.field == "representative_view_count" && count.count == 2 })
+        );
+        assert!(
+            summary
+                .representative_engagement_metric_field_counts
+                .iter()
+                .any(|count| { count.field == "representative_like_count" && count.count == 2 })
+        );
+        assert!(
+            summary
+                .representative_engagement_metric_field_counts
+                .iter()
+                .any(|count| { count.field == "representative_comment_count" && count.count == 1 })
+        );
+        assert!(
+            summary
+                .representative_engagement_metric_field_counts
+                .iter()
+                .any(|count| { count.field == "representative_share_count" && count.count == 1 })
         );
         assert!(
             summary

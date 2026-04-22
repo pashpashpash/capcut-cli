@@ -132,6 +132,7 @@ Implemented refinements:
 - returned sounds include `judgement_rank` from the full sorted library, so filtered shortlists can still show where each candidate ranked before filters were applied
 - returned sounds include `representative_engagement_metric_count` so agents can quickly tell whether viral-confidence metrics are present before reading each metric field
 - returned sounds include present and missing representative engagement metric field names, so partial metric coverage is inspectable without comparing every nullable count by hand
+- judgement summaries now include `representative_engagement_metric_field_counts`, so agents can see which viral-confidence fields are present across a library or filtered shortlist
 - `--min-representative-engagement-metrics` filters returned sounds by how many representative engagement fields are present, letting agents require broad metric coverage before trusting a viral shortlist
 - repeated `--require-engagement-metric-field` filters keep only sounds with specific representative engagement metric fields such as `representative_view_count` and `representative_like_count`
 - the resolver normalizer now reads Novi-style `statistics.*` engagement metrics, so future imports preserve representative views, likes, comments, and shares for judgement
