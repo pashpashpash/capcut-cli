@@ -95,6 +95,7 @@ Implemented refinements:
 - judgement summaries now include `representative_comment_count_band_counts`, so agents can compare absolute discussion-volume distribution before opening individual rows
 - judgement summaries now include `representative_comment_rate_band_counts`, so agents can compare discussion-density distribution before opening individual rows
 - returned sounds include `representative_share_rate_per_1000_views`, and `--min-representative-share-rate-per-1000-views` lets shortlists require spread density relative to reach instead of raw share counts alone
+- judgement summaries now include `representative_share_count_band_counts`, so agents can compare absolute spread-volume distribution before opening individual rows
 - judgement summaries now include `representative_share_rate_band_counts`, so agents can compare spread-density distribution before opening individual rows
 - judgement reports echo the applied `filters` next to `total_count`, `judged_count`, and `summary`, so zero-result shortlists remain explainable without reconstructing CLI flags from shell history
 - `filtered_out_count` makes zero-result or narrow-result reports explicit about how many sounds were removed by the filters
