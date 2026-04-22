@@ -421,6 +421,9 @@ struct JudgeSoundArgs {
 
     #[arg(long)]
     min_representative_likes: Option<u64>,
+
+    #[arg(long)]
+    min_representative_engagement_metrics: Option<usize>,
 }
 
 impl JudgeSoundArgs {
@@ -433,6 +436,12 @@ impl JudgeSoundArgs {
         }
         if self.max_trend_rank == Some(0) {
             bail!("--max-trend-rank must be greater than 0")
+        }
+        if self
+            .min_representative_engagement_metrics
+            .is_some_and(|count| count > 4)
+        {
+            bail!("--min-representative-engagement-metrics must be between 0 and 4")
         }
         if self
             .platforms
@@ -479,6 +488,7 @@ impl JudgeSoundArgs {
             min_extracted_audios: self.min_extracted_audios,
             min_representative_views: self.min_representative_views,
             min_representative_likes: self.min_representative_likes,
+            min_representative_engagement_metrics: self.min_representative_engagement_metrics,
         };
         let sounds = filter_judged_sounds(
             sounds,
@@ -493,6 +503,7 @@ impl JudgeSoundArgs {
             self.min_extracted_audios,
             self.min_representative_views,
             self.min_representative_likes,
+            self.min_representative_engagement_metrics,
             self.top,
         );
         let filtered_out_count = total_count - sounds.len();
@@ -584,6 +595,7 @@ fn filter_judged_sounds(
     min_extracted_audios: Option<usize>,
     min_representative_views: Option<u64>,
     min_representative_likes: Option<u64>,
+    min_representative_engagement_metrics: Option<usize>,
     top: Option<usize>,
 ) -> Vec<JudgedSound> {
     if let Some(min_score) = min_score {
@@ -648,6 +660,12 @@ fn filter_judged_sounds(
     if let Some(min_representative_likes) = min_representative_likes {
         sounds.retain(|sound| {
             sound.representative_like_count.unwrap_or_default() >= min_representative_likes
+        });
+    }
+
+    if let Some(min_representative_engagement_metrics) = min_representative_engagement_metrics {
+        sounds.retain(|sound| {
+            sound.representative_engagement_metric_count >= min_representative_engagement_metrics
         });
     }
 
@@ -798,6 +816,7 @@ mod tests {
             None,
             None,
             None,
+            None,
             Some(1),
         );
 
@@ -827,6 +846,7 @@ mod tests {
             None,
             None,
             None,
+            None,
         );
 
         assert_eq!(filtered.len(), 1);
@@ -847,6 +867,7 @@ mod tests {
             &[],
             &[],
             &[],
+            None,
             None,
             None,
             None,
@@ -890,6 +911,7 @@ mod tests {
             None,
             None,
             None,
+            None,
         );
 
         assert_eq!(filtered.len(), 1);
@@ -917,6 +939,7 @@ mod tests {
             None,
             Some(2),
             Some(2),
+            None,
             None,
             None,
             None,
@@ -950,6 +973,36 @@ mod tests {
             Some(1_000_000),
             Some(100_000),
             None,
+            None,
+        );
+
+        assert_eq!(filtered.len(), 1);
+        assert_eq!(filtered[0].sound_id, "sound_a");
+    }
+
+    #[test]
+    fn filter_judged_sounds_applies_engagement_metric_coverage_threshold() {
+        let mut complete_metrics = judged_sound("sound_a", 95, "shortlist_after_rights_review");
+        complete_metrics.representative_engagement_metric_count = 4;
+        let mut partial_metrics = judged_sound("sound_b", 95, "shortlist_after_rights_review");
+        partial_metrics.representative_engagement_metric_count = 2;
+        let missing_metrics = judged_sound("sound_c", 95, "shortlist_after_rights_review");
+
+        let filtered = filter_judged_sounds(
+            vec![complete_metrics, partial_metrics, missing_metrics],
+            None,
+            None,
+            &[],
+            &[],
+            &[],
+            &[],
+            None,
+            None,
+            None,
+            None,
+            None,
+            Some(3),
+            None,
         );
 
         assert_eq!(filtered.len(), 1);
@@ -975,6 +1028,7 @@ mod tests {
             &[],
             &[],
             &["RIGHTS STILL NEED".to_string()],
+            None,
             None,
             None,
             None,
@@ -1011,6 +1065,7 @@ mod tests {
             &[],
             &[],
             Some(1),
+            None,
             None,
             None,
             None,
