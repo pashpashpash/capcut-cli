@@ -396,6 +396,9 @@ struct JudgeSoundArgs {
     #[arg(long = "platform")]
     platforms: Vec<String>,
 
+    #[arg(long = "require-reason")]
+    required_reasons: Vec<String>,
+
     #[arg(long = "recommended-action")]
     recommended_actions: Vec<String>,
 
@@ -434,6 +437,13 @@ impl JudgeSoundArgs {
             bail!("--platform values must not be empty")
         }
         if self
+            .required_reasons
+            .iter()
+            .any(|reason| reason.trim().is_empty())
+        {
+            bail!("--require-reason values must not be empty")
+        }
+        if self
             .recommended_actions
             .iter()
             .any(|action| action.trim().is_empty())
@@ -456,6 +466,7 @@ impl JudgeSoundArgs {
             min_score: self.min_score,
             max_trend_rank: self.max_trend_rank,
             platforms: self.platforms.clone(),
+            required_reasons: self.required_reasons.clone(),
             recommended_actions: self.recommended_actions.clone(),
             excluded_risks: self.excluded_risks.clone(),
             min_downloaded_videos: self.min_downloaded_videos,
@@ -468,6 +479,7 @@ impl JudgeSoundArgs {
             self.min_score,
             self.max_trend_rank,
             &self.platforms,
+            &self.required_reasons,
             &self.recommended_actions,
             &self.excluded_risks,
             self.min_downloaded_videos,
@@ -556,6 +568,7 @@ fn filter_judged_sounds(
     min_score: Option<u32>,
     max_trend_rank: Option<u32>,
     platforms: &[String],
+    required_reasons: &[String],
     recommended_actions: &[String],
     excluded_risks: &[String],
     min_downloaded_videos: Option<usize>,
@@ -578,6 +591,10 @@ fn filter_judged_sounds(
                 .iter()
                 .any(|platform| sound.platform.eq_ignore_ascii_case(platform.trim()))
         });
+    }
+
+    if !required_reasons.is_empty() {
+        sounds.retain(|sound| matches_all_required_reasons(&sound.reasons, required_reasons));
     }
 
     if !recommended_actions.is_empty() {
@@ -626,6 +643,15 @@ fn filter_judged_sounds(
     }
 
     sounds
+}
+
+fn matches_all_required_reasons(reasons: &[String], required_reasons: &[String]) -> bool {
+    required_reasons.iter().all(|required| {
+        let required = required.trim().to_ascii_lowercase();
+        reasons
+            .iter()
+            .any(|reason| reason.to_ascii_lowercase().contains(&required))
+    })
 }
 
 fn matches_any_excluded_risk(risk: &str, excluded_risks: &[String]) -> bool {
@@ -747,6 +773,7 @@ mod tests {
             Some(50),
             None,
             &[],
+            &[],
             &["USE_FIRST".to_string(), "shortlist".to_string()],
             &[],
             None,
@@ -775,6 +802,7 @@ mod tests {
             &[],
             &[],
             &[],
+            &[],
             None,
             None,
             None,
@@ -797,6 +825,43 @@ mod tests {
             None,
             None,
             &["TIKTOK".to_string()],
+            &[],
+            &[],
+            &[],
+            None,
+            None,
+            None,
+            None,
+            None,
+        );
+
+        assert_eq!(filtered.len(), 1);
+        assert_eq!(filtered[0].sound_id, "sound_a");
+    }
+
+    #[test]
+    fn filter_judged_sounds_requires_reason_matches() {
+        let mut rich_evidence = judged_sound("sound_a", 95, "shortlist_after_rights_review");
+        rich_evidence
+            .reasons
+            .push("TikTok-sourced sound with platform provenance".to_string());
+        rich_evidence
+            .reasons
+            .push("One downloaded candidate video is available".to_string());
+        let mut weak_evidence = judged_sound("sound_b", 95, "shortlist_after_rights_review");
+        weak_evidence
+            .reasons
+            .push("TikTok-sourced sound with platform provenance".to_string());
+
+        let filtered = filter_judged_sounds(
+            vec![rich_evidence, weak_evidence],
+            None,
+            None,
+            &[],
+            &[
+                "tiktok-sourced".to_string(),
+                "downloaded candidate".to_string(),
+            ],
             &[],
             &[],
             None,
@@ -824,6 +889,7 @@ mod tests {
             vec![strong_asset, weak_asset, missing_counts],
             None,
             None,
+            &[],
             &[],
             &[],
             &[],
@@ -855,6 +921,7 @@ mod tests {
             &[],
             &[],
             &[],
+            &[],
             None,
             None,
             Some(1_000_000),
@@ -881,6 +948,7 @@ mod tests {
             vec![rights_risk, metrics_risk],
             None,
             None,
+            &[],
             &[],
             &[],
             &["RIGHTS STILL NEED".to_string()],
