@@ -74,6 +74,7 @@ Implemented refinements:
 - filtered judgement reports keep an overall summary with recommendation-action and score-band counts, so the shortlist does not hide the shape of the full local library
 - `--min-downloaded-videos` and `--min-extracted-audios` let the shortlist require enough usable local material for editing, which keeps "viral but unusable" sounds out of production-oriented passes
 - `--min-representative-views` and `--min-representative-likes` let the shortlist require direct engagement evidence instead of trusting chart rank alone
+- judgement reports echo the applied `filters` next to `total_count`, `judged_count`, and `summary`, so zero-result shortlists remain explainable without reconstructing CLI flags from shell history
 
 ## Provider ladder
 

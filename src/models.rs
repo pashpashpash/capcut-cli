@@ -148,8 +148,20 @@ pub struct SoundJudgementReport {
     pub manifest_path: String,
     pub total_count: usize,
     pub judged_count: usize,
+    pub filters: SoundJudgementFilters,
     pub summary: SoundJudgementSummary,
     pub sounds: Vec<JudgedSound>,
+}
+
+#[derive(Debug, Serialize)]
+pub struct SoundJudgementFilters {
+    pub top: Option<usize>,
+    pub min_score: Option<u32>,
+    pub recommended_actions: Vec<String>,
+    pub min_downloaded_videos: Option<usize>,
+    pub min_extracted_audios: Option<usize>,
+    pub min_representative_views: Option<u64>,
+    pub min_representative_likes: Option<u64>,
 }
 
 #[derive(Debug, Serialize)]

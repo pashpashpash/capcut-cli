@@ -10,7 +10,8 @@ use crate::{
     models::{
         AppReport, AuthReport, DiscoverSource, DiscoveryReport, JudgedSound, LibraryReport,
         MediaReport, PipelineStep, PipelineStepKind, RecommendedActionCount, ScoreBandCount,
-        SoundImportReport, SoundJudgementReport, SoundJudgementSummary, UpdateReport,
+        SoundImportReport, SoundJudgementFilters, SoundJudgementReport, SoundJudgementSummary,
+        UpdateReport,
     },
     tiktok::{
         self, DEFAULT_IMPORT_OUTPUT_DIR, ImportTrendingSoundsOptions, LIBRARY_MANIFEST_PATH,
@@ -424,6 +425,15 @@ impl JudgeSoundArgs {
         let sounds = tiktok::judge_sound_library(&self.manifest)?;
         let total_count = sounds.len();
         let summary = summarize_judged_sounds(&sounds);
+        let filters = SoundJudgementFilters {
+            top: self.top,
+            min_score: self.min_score,
+            recommended_actions: self.recommended_actions.clone(),
+            min_downloaded_videos: self.min_downloaded_videos,
+            min_extracted_audios: self.min_extracted_audios,
+            min_representative_views: self.min_representative_views,
+            min_representative_likes: self.min_representative_likes,
+        };
         let sounds = filter_judged_sounds(
             sounds,
             self.min_score,
@@ -439,6 +449,7 @@ impl JudgeSoundArgs {
             manifest_path: self.manifest.display().to_string(),
             total_count,
             judged_count: sounds.len(),
+            filters,
             summary,
             sounds,
         }))
