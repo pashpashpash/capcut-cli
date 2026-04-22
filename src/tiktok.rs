@@ -575,6 +575,15 @@ fn judge_manifest_entry(manifest_path: &Path, entry: &ManifestEntry) -> Result<J
             ],
         )
     });
+    let representative_engagement_metric_count = [
+        representative_view_count,
+        representative_like_count,
+        representative_comment_count,
+        representative_share_count,
+    ]
+    .iter()
+    .filter(|metric| metric.is_some())
+    .count();
 
     let mut score = 0;
     let mut reasons = Vec::new();
@@ -665,6 +674,7 @@ fn judge_manifest_entry(manifest_path: &Path, entry: &ManifestEntry) -> Result<J
         representative_like_count,
         representative_comment_count,
         representative_share_count,
+        representative_engagement_metric_count,
         score,
         reason_count: reasons.len(),
         reasons,
@@ -1729,6 +1739,7 @@ mod tests {
             representative_like_count: None,
             representative_comment_count: None,
             representative_share_count: None,
+            representative_engagement_metric_count: 0,
             score,
             reason_count: 0,
             reasons: Vec::new(),
@@ -1807,6 +1818,7 @@ mod tests {
 
         assert_eq!(judged.score, 100);
         assert_eq!(judged.recommended_action, "shortlist_after_rights_review");
+        assert_eq!(judged.representative_engagement_metric_count, 4);
         assert_eq!(judged.reason_count, judged.reasons.len());
         assert!(
             judged.risks.contains(

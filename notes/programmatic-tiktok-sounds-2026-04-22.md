@@ -80,6 +80,7 @@ Implemented refinements:
 - `filtered_summary` summarizes the returned shortlist separately from the full-library `summary`, which makes narrow passes easier to inspect without re-counting rows
 - `sort_order` is echoed in judgement reports so agents know returned rows are ordered by score descending, trend rank ascending, then sound id ascending
 - returned sounds include `judgement_rank` from the full sorted library, so filtered shortlists can still show where each candidate ranked before filters were applied
+- returned sounds include `representative_engagement_metric_count` so agents can quickly tell whether viral-confidence metrics are present before reading each metric field
 - returned sounds include `reason_count` so agents can inspect positive-signal density directly instead of counting the `reasons` array
 - returned sounds include `risk_count` so agents can inspect risk density directly instead of counting the `risks` array after using risk filters
 - repeated `--exclude-risk` filters remove sounds whose risk text contains a matching substring, allowing production-oriented passes to drop known blockers such as unresolved rights review

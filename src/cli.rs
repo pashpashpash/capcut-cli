@@ -766,6 +766,7 @@ mod tests {
             representative_like_count: None,
             representative_comment_count: None,
             representative_share_count: None,
+            representative_engagement_metric_count: 0,
             score,
             reason_count: 0,
             reasons: Vec::new(),
