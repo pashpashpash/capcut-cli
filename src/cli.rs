@@ -798,6 +798,8 @@ mod tests {
             representative_comment_count: None,
             representative_share_count: None,
             representative_engagement_metric_count: 0,
+            representative_engagement_metric_fields: Vec::new(),
+            missing_representative_engagement_metric_fields: Vec::new(),
             score,
             reason_count: 0,
             reasons: Vec::new(),

@@ -235,6 +235,8 @@ pub struct JudgedSound {
     pub representative_comment_count: Option<u64>,
     pub representative_share_count: Option<u64>,
     pub representative_engagement_metric_count: usize,
+    pub representative_engagement_metric_fields: Vec<String>,
+    pub missing_representative_engagement_metric_fields: Vec<String>,
     pub score: u32,
     pub reason_count: usize,
     pub reasons: Vec<String>,
