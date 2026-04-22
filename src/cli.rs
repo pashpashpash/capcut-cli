@@ -9,9 +9,10 @@ use crate::{
     config::{self, APIFY_CONFIG_ENV, TIKTOK_SOUND_RESOLVER_ACTOR_ID_ENV},
     models::{
         AppReport, AuthReport, DiscoverSource, DiscoveryReport, EngagementMetricCoverageCount,
-        JudgedSound, LibraryReport, MediaReport, PipelineStep, PipelineStepKind, PlatformCount,
-        ReasonCount, RecommendedActionCount, RiskCount, ScoreBandCount, SoundImportReport,
-        SoundJudgementFilters, SoundJudgementReport, SoundJudgementSummary, UpdateReport,
+        JudgedSound, LibraryReport, MediaReport, MissingEngagementMetricFieldCount, PipelineStep,
+        PipelineStepKind, PlatformCount, ReasonCount, RecommendedActionCount, RiskCount,
+        ScoreBandCount, SoundImportReport, SoundJudgementFilters, SoundJudgementReport,
+        SoundJudgementSummary, UpdateReport,
     },
     tiktok::{
         self, DEFAULT_IMPORT_OUTPUT_DIR, ImportTrendingSoundsOptions, LIBRARY_MANIFEST_PATH,
@@ -528,6 +529,7 @@ fn summarize_judged_sounds(sounds: &[JudgedSound]) -> SoundJudgementSummary {
     let mut platform_counts = BTreeMap::new();
     let mut score_band_counts = BTreeMap::new();
     let mut engagement_metric_coverage_counts = BTreeMap::new();
+    let mut missing_engagement_metric_field_counts = BTreeMap::new();
     let mut reason_counts = BTreeMap::new();
     let mut risk_counts = BTreeMap::new();
 
@@ -542,6 +544,11 @@ fn summarize_judged_sounds(sounds: &[JudgedSound]) -> SoundJudgementSummary {
         *engagement_metric_coverage_counts
             .entry(sound.representative_engagement_metric_count)
             .or_insert(0) += 1;
+        for field in &sound.missing_representative_engagement_metric_fields {
+            *missing_engagement_metric_field_counts
+                .entry(field.clone())
+                .or_insert(0) += 1;
+        }
         for reason in &sound.reasons {
             *reason_counts.entry(reason.clone()).or_insert(0) += 1;
         }
@@ -574,6 +581,10 @@ fn summarize_judged_sounds(sounds: &[JudgedSound]) -> SoundJudgementSummary {
                     count,
                 },
             )
+            .collect(),
+        missing_engagement_metric_field_counts: missing_engagement_metric_field_counts
+            .into_iter()
+            .map(|(field, count)| MissingEngagementMetricFieldCount { field, count })
             .collect(),
         reason_counts: reason_counts
             .into_iter()
@@ -1105,6 +1116,10 @@ mod tests {
             .push("Rights still need manual verification before production use".to_string());
         let mut metrics_risk = judged_sound("sound_b", 82, "shortlist_after_rights_review");
         metrics_risk.representative_engagement_metric_count = 2;
+        metrics_risk.missing_representative_engagement_metric_fields = vec![
+            "representative_comment_count".to_string(),
+            "representative_share_count".to_string(),
+        ];
         metrics_risk
             .reasons
             .push("Top 10 trend rank is recorded".to_string());
@@ -1118,12 +1133,25 @@ mod tests {
             .risks
             .push("Rights still need manual verification before production use".to_string());
 
+        let missing_fields = vec![
+            "representative_view_count".to_string(),
+            "representative_like_count".to_string(),
+            "representative_comment_count".to_string(),
+            "representative_share_count".to_string(),
+        ];
+        let mut weak_signal = judged_sound("sound_c", 65, "shortlist");
+        weak_signal.missing_representative_engagement_metric_fields = missing_fields.clone();
+        let mut needs_review = judged_sound("sound_d", 40, "needs_review");
+        needs_review.missing_representative_engagement_metric_fields = missing_fields.clone();
+        let mut skip_for_now = judged_sound("sound_e", 20, "skip_for_now");
+        skip_for_now.missing_representative_engagement_metric_fields = missing_fields;
+
         let sounds = vec![
             rights_risk,
             metrics_risk,
-            judged_sound("sound_c", 65, "shortlist"),
-            judged_sound("sound_d", 40, "needs_review"),
-            judged_sound("sound_e", 20, "skip_for_now"),
+            weak_signal,
+            needs_review,
+            skip_for_now,
         ];
 
         let summary = summarize_judged_sounds(&sounds);
@@ -1173,6 +1201,18 @@ mod tests {
                 .any(|count| {
                     count.representative_engagement_metric_count == 4 && count.count == 1
                 })
+        );
+        assert!(
+            summary
+                .missing_engagement_metric_field_counts
+                .iter()
+                .any(|count| { count.field == "representative_view_count" && count.count == 3 })
+        );
+        assert!(
+            summary
+                .missing_engagement_metric_field_counts
+                .iter()
+                .any(|count| { count.field == "representative_comment_count" && count.count == 4 })
         );
         assert!(
             summary.reason_counts.iter().any(|count| {

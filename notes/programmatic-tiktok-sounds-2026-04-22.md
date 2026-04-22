@@ -90,6 +90,7 @@ Implemented refinements:
 - judgement summaries now include risk text counts, so risk-filtered runs can show both the returned shortlist risks and the full-library blocker distribution
 - judgement summaries now include reason text counts, so agents can see which positive signals are actually driving a shortlist instead of reading every returned row
 - judgement summaries now include engagement-metric coverage counts, so agents can see whether the library has broad representative views/likes/comments/shares coverage before trusting a viral shortlist
+- judgement summaries now include missing engagement metric field counts, so agents can see which representative engagement metrics the resolver/library most often lacks
 - `--max-trend-rank` filters the judgement report to sounds with recorded chart positions at or above a rank cutoff, making viral-rank passes explicit instead of relying only on score side effects
 - repeated `--platform` filters restrict judgement reports to specific providers such as TikTok, and summary counts now expose the full platform distribution
 - repeated `--require-reason` filters keep only sounds whose reason text contains every requested positive-evidence substring, so agents can require specific support such as downloaded assets or platform provenance
