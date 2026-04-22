@@ -8,11 +8,11 @@ use crate::{
     apify,
     config::{self, APIFY_CONFIG_ENV, TIKTOK_SOUND_RESOLVER_ACTOR_ID_ENV},
     models::{
-        AppReport, AuthReport, DiscoverSource, DiscoveryReport, EngagementMetricCoverageCount,
-        JudgedSound, LibraryReport, MediaReport, MissingEngagementMetricFieldCount, PipelineStep,
-        PipelineStepKind, PlatformCount, ReasonCount, RecommendedActionCount, RiskCount,
-        ScoreBandCount, SoundImportReport, SoundJudgementFilters, SoundJudgementReport,
-        SoundJudgementSummary, UpdateReport,
+        AppReport, AuthReport, CandidatePostCoverageCount, DiscoverSource, DiscoveryReport,
+        EngagementMetricCoverageCount, JudgedSound, LibraryReport, MediaReport,
+        MissingEngagementMetricFieldCount, PipelineStep, PipelineStepKind, PlatformCount,
+        ReasonCount, RecommendedActionCount, RiskCount, ScoreBandCount, SoundImportReport,
+        SoundJudgementFilters, SoundJudgementReport, SoundJudgementSummary, UpdateReport,
     },
     tiktok::{
         self, DEFAULT_IMPORT_OUTPUT_DIR, ImportTrendingSoundsOptions, LIBRARY_MANIFEST_PATH,
@@ -601,6 +601,7 @@ fn summarize_judged_sounds(sounds: &[JudgedSound]) -> SoundJudgementSummary {
     let mut recommended_action_counts = BTreeMap::new();
     let mut platform_counts = BTreeMap::new();
     let mut score_band_counts = BTreeMap::new();
+    let mut candidate_post_coverage_counts = BTreeMap::new();
     let mut engagement_metric_coverage_counts = BTreeMap::new();
     let mut missing_engagement_metric_field_counts = BTreeMap::new();
     let mut reason_counts = BTreeMap::new();
@@ -613,6 +614,9 @@ fn summarize_judged_sounds(sounds: &[JudgedSound]) -> SoundJudgementSummary {
         *platform_counts.entry(sound.platform.clone()).or_insert(0) += 1;
         *score_band_counts
             .entry(score_band(sound.score).to_string())
+            .or_insert(0) += 1;
+        *candidate_post_coverage_counts
+            .entry(sound.candidate_post_count)
             .or_insert(0) += 1;
         *engagement_metric_coverage_counts
             .entry(sound.representative_engagement_metric_count)
@@ -645,6 +649,13 @@ fn summarize_judged_sounds(sounds: &[JudgedSound]) -> SoundJudgementSummary {
         score_band_counts: score_band_counts
             .into_iter()
             .map(|(band, count)| ScoreBandCount { band, count })
+            .collect(),
+        candidate_post_coverage_counts: candidate_post_coverage_counts
+            .into_iter()
+            .map(|(candidate_post_count, count)| CandidatePostCoverageCount {
+                candidate_post_count,
+                count,
+            })
             .collect(),
         engagement_metric_coverage_counts: engagement_metric_coverage_counts
             .into_iter()
@@ -1486,6 +1497,7 @@ mod tests {
     #[test]
     fn summarize_judged_sounds_counts_actions_score_bands_reasons_and_risks() {
         let mut rights_risk = judged_sound("sound_a", 95, "shortlist_after_rights_review");
+        rights_risk.candidate_post_count = Some(20);
         rights_risk.representative_engagement_metric_count = 4;
         rights_risk
             .reasons
@@ -1494,6 +1506,7 @@ mod tests {
             .risks
             .push("Rights still need manual verification before production use".to_string());
         let mut metrics_risk = judged_sound("sound_b", 82, "shortlist_after_rights_review");
+        metrics_risk.candidate_post_count = Some(5);
         metrics_risk.representative_engagement_metric_count = 2;
         metrics_risk.missing_representative_engagement_metric_fields = vec![
             "representative_comment_count".to_string(),
@@ -1556,6 +1569,24 @@ mod tests {
                 .score_band_counts
                 .iter()
                 .any(|count| { count.band == "0_29" && count.count == 1 })
+        );
+        assert!(
+            summary
+                .candidate_post_coverage_counts
+                .iter()
+                .any(|count| { count.candidate_post_count == Some(20) && count.count == 1 })
+        );
+        assert!(
+            summary
+                .candidate_post_coverage_counts
+                .iter()
+                .any(|count| { count.candidate_post_count == Some(5) && count.count == 1 })
+        );
+        assert!(
+            summary
+                .candidate_post_coverage_counts
+                .iter()
+                .any(|count| { count.candidate_post_count.is_none() && count.count == 3 })
         );
         assert!(
             summary
