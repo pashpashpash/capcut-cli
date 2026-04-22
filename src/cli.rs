@@ -11,14 +11,14 @@ use crate::{
         AppReport, AuthReport, CandidatePostCoverageCount, DiscoverSource, DiscoveryReport,
         DownloadedVideoCoverageCount, EngagementMetricCoverageCount, ExtractedAudioCoverageCount,
         JudgedSound, LibraryReport, MediaReport, MissingEngagementMetricFieldCount, PipelineStep,
-        PipelineStepKind, PlatformCount, ReasonCount, RecommendedActionCount,
-        RepresentativeCommentCountBandCount, RepresentativeCommentRateBandCount,
-        RepresentativeEngagementCountBandCount, RepresentativeEngagementRateBandCount,
-        RepresentativeLikeCountBandCount, RepresentativeLikeRateBandCount,
-        RepresentativeShareCountBandCount, RepresentativeShareRateBandCount,
-        RepresentativeViewCountBandCount, RiskCount, ScoreBandCount, SoundImportReport,
-        SoundJudgementFilters, SoundJudgementReport, SoundJudgementSummary, UpdateReport,
-        UsableAssetPairCoverageCount,
+        PipelineStepKind, PlatformCount, ReasonCount, ReasonCountCoverageCount,
+        RecommendedActionCount, RepresentativeCommentCountBandCount,
+        RepresentativeCommentRateBandCount, RepresentativeEngagementCountBandCount,
+        RepresentativeEngagementRateBandCount, RepresentativeLikeCountBandCount,
+        RepresentativeLikeRateBandCount, RepresentativeShareCountBandCount,
+        RepresentativeShareRateBandCount, RepresentativeViewCountBandCount, RiskCount,
+        RiskCountCoverageCount, ScoreBandCount, SoundImportReport, SoundJudgementFilters,
+        SoundJudgementReport, SoundJudgementSummary, UpdateReport, UsableAssetPairCoverageCount,
     },
     tiktok::{
         self, DEFAULT_IMPORT_OUTPUT_DIR, ImportTrendingSoundsOptions, LIBRARY_MANIFEST_PATH,
@@ -612,6 +612,8 @@ fn summarize_judged_sounds(sounds: &[JudgedSound]) -> SoundJudgementSummary {
     let mut recommended_action_counts = BTreeMap::new();
     let mut platform_counts = BTreeMap::new();
     let mut score_band_counts = BTreeMap::new();
+    let mut reason_count_coverage_counts = BTreeMap::new();
+    let mut risk_count_coverage_counts = BTreeMap::new();
     let mut downloaded_video_coverage_counts = BTreeMap::new();
     let mut extracted_audio_coverage_counts = BTreeMap::new();
     let mut usable_asset_pair_coverage_counts = BTreeMap::new();
@@ -637,6 +639,12 @@ fn summarize_judged_sounds(sounds: &[JudgedSound]) -> SoundJudgementSummary {
         *platform_counts.entry(sound.platform.clone()).or_insert(0) += 1;
         *score_band_counts
             .entry(score_band(sound.score).to_string())
+            .or_insert(0) += 1;
+        *reason_count_coverage_counts
+            .entry(sound.reasons.len())
+            .or_insert(0) += 1;
+        *risk_count_coverage_counts
+            .entry(sound.risks.len())
             .or_insert(0) += 1;
         *downloaded_video_coverage_counts
             .entry(sound.downloaded_video_count)
@@ -726,6 +734,17 @@ fn summarize_judged_sounds(sounds: &[JudgedSound]) -> SoundJudgementSummary {
         score_band_counts: score_band_counts
             .into_iter()
             .map(|(band, count)| ScoreBandCount { band, count })
+            .collect(),
+        reason_count_coverage_counts: reason_count_coverage_counts
+            .into_iter()
+            .map(|(reason_count, count)| ReasonCountCoverageCount {
+                reason_count,
+                count,
+            })
+            .collect(),
+        risk_count_coverage_counts: risk_count_coverage_counts
+            .into_iter()
+            .map(|(risk_count, count)| RiskCountCoverageCount { risk_count, count })
             .collect(),
         downloaded_video_coverage_counts: downloaded_video_coverage_counts
             .into_iter()
@@ -1897,6 +1916,42 @@ mod tests {
                 .score_band_counts
                 .iter()
                 .any(|count| { count.band == "0_29" && count.count == 1 })
+        );
+        assert!(
+            summary
+                .reason_count_coverage_counts
+                .iter()
+                .any(|count| { count.reason_count == 0 && count.count == 3 })
+        );
+        assert!(
+            summary
+                .reason_count_coverage_counts
+                .iter()
+                .any(|count| { count.reason_count == 1 && count.count == 1 })
+        );
+        assert!(
+            summary
+                .reason_count_coverage_counts
+                .iter()
+                .any(|count| { count.reason_count == 2 && count.count == 1 })
+        );
+        assert!(
+            summary
+                .risk_count_coverage_counts
+                .iter()
+                .any(|count| { count.risk_count == 0 && count.count == 3 })
+        );
+        assert!(
+            summary
+                .risk_count_coverage_counts
+                .iter()
+                .any(|count| { count.risk_count == 1 && count.count == 1 })
+        );
+        assert!(
+            summary
+                .risk_count_coverage_counts
+                .iter()
+                .any(|count| { count.risk_count == 2 && count.count == 1 })
         );
         assert!(
             summary

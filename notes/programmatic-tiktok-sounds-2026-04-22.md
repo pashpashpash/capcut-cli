@@ -85,6 +85,7 @@ Implemented refinements:
 - judgement summaries now include `downloaded_video_coverage_counts` and `extracted_audio_coverage_counts`, so agents can see local asset readiness distribution before opening individual rows
 - returned sounds include `usable_asset_pair_count`, and judgement summaries include `usable_asset_pair_coverage_counts`, so agents can see how many complete video/audio pairs are actually ready
 - `--min-usable-asset-pairs` lets production shortlists require complete downloaded-video/extracted-audio pairs instead of checking both raw asset counts manually
+- judgement summaries now include `reason_count_coverage_counts` and `risk_count_coverage_counts`, so agents can compare signal and blocker density before opening individual rows
 - `--min-representative-views`, `--min-representative-likes`, `--min-representative-comments`, and `--min-representative-shares` let the shortlist require direct engagement, discussion, and spread evidence instead of trusting chart rank alone
 - returned sounds include `representative_engagement_count`, and `--min-representative-engagements` lets shortlists require absolute likes, comments, and shares volume before trusting dense but tiny samples
 - judgement summaries now include `representative_engagement_count_band_counts`, so agents can compare absolute engagement-volume distribution before opening individual rows
