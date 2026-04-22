@@ -1338,6 +1338,8 @@ fn normalize_resolver_post_item(item: &Value, resolver_index: usize) -> Option<C
                 &["playCount"],
                 &["stats", "play_count"],
                 &["stats", "playCount"],
+                &["statistics", "play_count"],
+                &["statistics", "playCount"],
             ],
         ),
         digg_count: first_u64(
@@ -1350,6 +1352,10 @@ fn normalize_resolver_post_item(item: &Value, resolver_index: usize) -> Option<C
                 &["stats", "digg_count"],
                 &["stats", "diggCount"],
                 &["stats", "likeCount"],
+                &["statistics", "digg_count"],
+                &["statistics", "diggCount"],
+                &["statistics", "like_count"],
+                &["statistics", "likeCount"],
             ],
         ),
         comment_count: first_u64(
@@ -1359,6 +1365,8 @@ fn normalize_resolver_post_item(item: &Value, resolver_index: usize) -> Option<C
                 &["commentCount"],
                 &["stats", "comment_count"],
                 &["stats", "commentCount"],
+                &["statistics", "comment_count"],
+                &["statistics", "commentCount"],
             ],
         ),
         share_count: first_u64(
@@ -1368,6 +1376,8 @@ fn normalize_resolver_post_item(item: &Value, resolver_index: usize) -> Option<C
                 &["shareCount"],
                 &["stats", "share_count"],
                 &["stats", "shareCount"],
+                &["statistics", "share_count"],
+                &["statistics", "shareCount"],
             ],
         ),
         download_url: first_non_empty_string(
@@ -1912,6 +1922,29 @@ mod tests {
         );
         assert_eq!(candidate.digg_count, Some(7611));
         assert_eq!(candidate.comment_count, Some(5358));
+    }
+
+    #[test]
+    fn normalize_resolver_post_reads_statistics_engagement_metrics() {
+        let item = json!({
+            "aweme_id": "7564571947263069454",
+            "author": {
+                "unique_id": "creator"
+            },
+            "statistics": {
+                "play_count": 37_548_076,
+                "digg_count": 7_427_697,
+                "comment_count": 51_294,
+                "share_count": 1_375_712
+            }
+        });
+
+        let candidate = normalize_resolver_post_item(&item, 0).expect("candidate");
+
+        assert_eq!(candidate.play_count, Some(37_548_076));
+        assert_eq!(candidate.digg_count, Some(7_427_697));
+        assert_eq!(candidate.comment_count, Some(51_294));
+        assert_eq!(candidate.share_count, Some(1_375_712));
     }
 
     #[test]
