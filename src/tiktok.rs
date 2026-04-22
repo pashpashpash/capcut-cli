@@ -589,6 +589,11 @@ fn judge_manifest_entry(manifest_path: &Path, entry: &ManifestEntry) -> Result<J
         )
         .or(representative_post_engagement.share_count)
     });
+    let representative_engagement_count = sum_counts(&[
+        representative_like_count,
+        representative_comment_count,
+        representative_share_count,
+    ]);
     let representative_like_rate_per_1000_views =
         rate_per_1000(representative_like_count, representative_view_count);
     let representative_engagement_rate_per_1000_views = rate_sum_per_1000(
@@ -718,6 +723,7 @@ fn judge_manifest_entry(manifest_path: &Path, entry: &ManifestEntry) -> Result<J
         extracted_audio_count,
         representative_view_count,
         representative_like_count,
+        representative_engagement_count,
         representative_like_rate_per_1000_views,
         representative_engagement_rate_per_1000_views,
         representative_comment_count,
@@ -1675,6 +1681,17 @@ fn rate_per_1000(numerator: Option<u64>, denominator: Option<u64>) -> Option<u64
     rate_sum_per_1000(&[numerator], denominator)
 }
 
+fn sum_counts(values: &[Option<u64>]) -> Option<u64> {
+    let mut total = 0_u128;
+    let mut has_value = false;
+    for value in values.iter().flatten() {
+        total += u128::from(*value);
+        has_value = true;
+    }
+
+    has_value.then(|| u64::try_from(total).ok())?
+}
+
 fn rate_sum_per_1000(numerators: &[Option<u64>], denominator: Option<u64>) -> Option<u64> {
     let denominator = u128::from(denominator?);
     if denominator == 0 {
@@ -1892,6 +1909,7 @@ mod tests {
             extracted_audio_count: Some(1),
             representative_view_count: None,
             representative_like_count: None,
+            representative_engagement_count: None,
             representative_like_rate_per_1000_views: None,
             representative_engagement_rate_per_1000_views: None,
             representative_comment_count: None,
@@ -1979,6 +1997,7 @@ mod tests {
 
         assert_eq!(judged.score, 100);
         assert_eq!(judged.recommended_action, "shortlist_after_rights_review");
+        assert_eq!(judged.representative_engagement_count, Some(129_000));
         assert_eq!(judged.representative_like_rate_per_1000_views, Some(83));
         assert_eq!(
             judged.representative_engagement_rate_per_1000_views,
@@ -2083,6 +2102,7 @@ mod tests {
 
         assert_eq!(judged.representative_view_count, Some(37_548_076));
         assert_eq!(judged.representative_like_count, Some(7_427_697));
+        assert_eq!(judged.representative_engagement_count, Some(8_854_703));
         assert_eq!(judged.representative_like_rate_per_1000_views, Some(197));
         assert_eq!(
             judged.representative_engagement_rate_per_1000_views,
