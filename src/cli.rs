@@ -391,6 +391,12 @@ struct JudgeSoundArgs {
 
     #[arg(long = "recommended-action")]
     recommended_actions: Vec<String>,
+
+    #[arg(long)]
+    min_downloaded_videos: Option<usize>,
+
+    #[arg(long)]
+    min_extracted_audios: Option<usize>,
 }
 
 impl JudgeSoundArgs {
@@ -412,8 +418,14 @@ impl JudgeSoundArgs {
         let sounds = tiktok::judge_sound_library(&self.manifest)?;
         let total_count = sounds.len();
         let summary = summarize_judged_sounds(&sounds);
-        let sounds =
-            filter_judged_sounds(sounds, self.min_score, &self.recommended_actions, self.top);
+        let sounds = filter_judged_sounds(
+            sounds,
+            self.min_score,
+            &self.recommended_actions,
+            self.min_downloaded_videos,
+            self.min_extracted_audios,
+            self.top,
+        );
 
         Ok(AppReport::SoundJudgement(SoundJudgementReport {
             manifest_path: self.manifest.display().to_string(),
@@ -466,6 +478,8 @@ fn filter_judged_sounds(
     mut sounds: Vec<JudgedSound>,
     min_score: Option<u32>,
     recommended_actions: &[String],
+    min_downloaded_videos: Option<usize>,
+    min_extracted_audios: Option<usize>,
     top: Option<usize>,
 ) -> Vec<JudgedSound> {
     if let Some(min_score) = min_score {
@@ -477,6 +491,18 @@ fn filter_judged_sounds(
             recommended_actions
                 .iter()
                 .any(|action| sound.recommended_action.eq_ignore_ascii_case(action.trim()))
+        });
+    }
+
+    if let Some(min_downloaded_videos) = min_downloaded_videos {
+        sounds.retain(|sound| {
+            sound.downloaded_video_count.unwrap_or_default() >= min_downloaded_videos
+        });
+    }
+
+    if let Some(min_extracted_audios) = min_extracted_audios {
+        sounds.retain(|sound| {
+            sound.extracted_audio_count.unwrap_or_default() >= min_extracted_audios
         });
     }
 
@@ -598,11 +624,36 @@ mod tests {
             sounds,
             Some(50),
             &["USE_FIRST".to_string(), "shortlist".to_string()],
+            None,
+            None,
             Some(1),
         );
 
         assert_eq!(filtered.len(), 1);
         assert_eq!(filtered[0].sound_id, "sound_b");
+    }
+
+    #[test]
+    fn filter_judged_sounds_applies_asset_coverage_thresholds() {
+        let mut strong_asset = judged_sound("sound_a", 95, "shortlist_after_rights_review");
+        strong_asset.downloaded_video_count = Some(3);
+        strong_asset.extracted_audio_count = Some(2);
+        let mut weak_asset = judged_sound("sound_b", 95, "shortlist_after_rights_review");
+        weak_asset.downloaded_video_count = Some(3);
+        weak_asset.extracted_audio_count = Some(1);
+        let missing_counts = judged_sound("sound_c", 95, "shortlist_after_rights_review");
+
+        let filtered = filter_judged_sounds(
+            vec![strong_asset, weak_asset, missing_counts],
+            None,
+            &[],
+            Some(2),
+            Some(2),
+            None,
+        );
+
+        assert_eq!(filtered.len(), 1);
+        assert_eq!(filtered[0].sound_id, "sound_a");
     }
 
     #[test]

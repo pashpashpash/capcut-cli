@@ -46,7 +46,7 @@ Add a local judgement/report command over imported sounds before adding more net
 
 ```bash
 capcut-cli library sound judge --manifest library/sounds/manifest.json
-capcut-cli library sound judge --manifest library/sounds/manifest.json --min-score 75 --top 3
+capcut-cli library sound judge --manifest library/sounds/manifest.json --min-score 75 --min-downloaded-videos 2 --min-extracted-audios 2 --top 3
 ```
 
 The command should be offline and deterministic. It should read the committed manifest plus per-sound metadata and output JSON with:
@@ -72,6 +72,7 @@ Implemented refinements:
 
 - the judgement command now supports `--min-score`, repeated `--recommended-action`, and `--top`, so an agent can ask for a shortlist directly without post-processing the JSON dump
 - filtered judgement reports keep an overall summary with recommendation-action and score-band counts, so the shortlist does not hide the shape of the full local library
+- `--min-downloaded-videos` and `--min-extracted-audios` let the shortlist require enough usable local material for editing, which keeps "viral but unusable" sounds out of production-oriented passes
 
 ## Provider ladder
 
