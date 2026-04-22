@@ -228,6 +228,7 @@ pub struct JudgedSound {
     pub representative_share_count: Option<u64>,
     pub score: u32,
     pub reasons: Vec<String>,
+    pub risk_count: usize,
     pub risks: Vec<String>,
     pub recommended_action: String,
 }

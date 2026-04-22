@@ -667,6 +667,7 @@ fn judge_manifest_entry(manifest_path: &Path, entry: &ManifestEntry) -> Result<J
         representative_share_count,
         score,
         reasons,
+        risk_count: risks.len(),
         risks,
         recommended_action,
     })
@@ -1729,6 +1730,7 @@ mod tests {
             representative_share_count: None,
             score,
             reasons: Vec::new(),
+            risk_count: 0,
             risks: Vec::new(),
             recommended_action: "shortlist_after_rights_review".to_string(),
         }
@@ -1808,6 +1810,7 @@ mod tests {
                 &"Rights still need manual verification before production use".to_string()
             )
         );
+        assert_eq!(judged.risk_count, judged.risks.len());
     }
 
     #[test]

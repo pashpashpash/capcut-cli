@@ -768,6 +768,7 @@ mod tests {
             representative_share_count: None,
             score,
             reasons: Vec::new(),
+            risk_count: 0,
             risks: Vec::new(),
             recommended_action: recommended_action.to_string(),
         }
