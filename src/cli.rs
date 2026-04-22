@@ -9,19 +9,19 @@ use crate::{
     config::{self, APIFY_CONFIG_ENV, TIKTOK_SOUND_RESOLVER_ACTOR_ID_ENV},
     models::{
         AppReport, AuthReport, CandidatePostCoverageCount, DiscoverSource, DiscoveryReport,
-        DownloadedVideoCoverageCount, EngagementMetricCoverageCount, ExtractedAudioCoverageCount,
-        JudgedSound, JudgementRankBandCount, LibraryReport, LocalArtifactPathCoverageCount,
-        LocalArtifactPathFieldCount, MediaReport, MissingEngagementMetricFieldCount,
-        MissingLocalArtifactPathFieldCount, PipelineStep, PipelineStepKind, PlatformCount,
-        ReasonCount, ReasonCountCoverageCount, RecommendedActionCount,
-        RepresentativeCommentCountBandCount, RepresentativeCommentRateBandCount,
-        RepresentativeEngagementCountBandCount, RepresentativeEngagementMetricFieldCount,
-        RepresentativeEngagementRateBandCount, RepresentativeLikeCountBandCount,
-        RepresentativeLikeRateBandCount, RepresentativeShareCountBandCount,
-        RepresentativeShareRateBandCount, RepresentativeViewCountBandCount, RiskCount,
-        RiskCountCoverageCount, ScoreBandCount, SoundImportReport, SoundJudgementFilters,
-        SoundJudgementReport, SoundJudgementSummary, TrendRankBandCount, UpdateReport,
-        UsableAssetPairCoverageCount,
+        DownloadedVideoCoverageCount, DurationSecondsBandCount, EngagementMetricCoverageCount,
+        ExtractedAudioCoverageCount, JudgedSound, JudgementRankBandCount, LibraryReport,
+        LocalArtifactPathCoverageCount, LocalArtifactPathFieldCount, MediaReport,
+        MissingEngagementMetricFieldCount, MissingLocalArtifactPathFieldCount, PipelineStep,
+        PipelineStepKind, PlatformCount, ReasonCount, ReasonCountCoverageCount,
+        RecommendedActionCount, RepresentativeCommentCountBandCount,
+        RepresentativeCommentRateBandCount, RepresentativeEngagementCountBandCount,
+        RepresentativeEngagementMetricFieldCount, RepresentativeEngagementRateBandCount,
+        RepresentativeLikeCountBandCount, RepresentativeLikeRateBandCount,
+        RepresentativeShareCountBandCount, RepresentativeShareRateBandCount,
+        RepresentativeViewCountBandCount, RiskCount, RiskCountCoverageCount, ScoreBandCount,
+        SoundImportReport, SoundJudgementFilters, SoundJudgementReport, SoundJudgementSummary,
+        TrendRankBandCount, UpdateReport, UsableAssetPairCoverageCount,
     },
     tiktok::{
         self, DEFAULT_IMPORT_OUTPUT_DIR, ImportTrendingSoundsOptions, LIBRARY_MANIFEST_PATH,
@@ -699,6 +699,7 @@ fn summarize_judged_sounds(sounds: &[JudgedSound]) -> SoundJudgementSummary {
     let mut score_band_counts = BTreeMap::new();
     let mut trend_rank_band_counts = BTreeMap::new();
     let mut judgement_rank_band_counts = BTreeMap::new();
+    let mut duration_seconds_band_counts = BTreeMap::new();
     let mut reason_count_coverage_counts = BTreeMap::new();
     let mut risk_count_coverage_counts = BTreeMap::new();
     let mut downloaded_video_coverage_counts = BTreeMap::new();
@@ -736,6 +737,9 @@ fn summarize_judged_sounds(sounds: &[JudgedSound]) -> SoundJudgementSummary {
             .or_insert(0) += 1;
         *judgement_rank_band_counts
             .entry(judgement_rank_band(sound.judgement_rank).to_string())
+            .or_insert(0) += 1;
+        *duration_seconds_band_counts
+            .entry(duration_seconds_band(sound.duration_seconds).to_string())
             .or_insert(0) += 1;
         *reason_count_coverage_counts
             .entry(sound.reasons.len())
@@ -857,6 +861,10 @@ fn summarize_judged_sounds(sounds: &[JudgedSound]) -> SoundJudgementSummary {
         judgement_rank_band_counts: judgement_rank_band_counts
             .into_iter()
             .map(|(band, count)| JudgementRankBandCount { band, count })
+            .collect(),
+        duration_seconds_band_counts: duration_seconds_band_counts
+            .into_iter()
+            .map(|(band, count)| DurationSecondsBandCount { band, count })
             .collect(),
         reason_count_coverage_counts: reason_count_coverage_counts
             .into_iter()
@@ -1038,6 +1046,17 @@ fn judgement_rank_band(rank: Option<usize>) -> &'static str {
         Some(11..=25) => "11_25",
         Some(26..=50) => "26_50",
         Some(51..) => "51_plus",
+        Some(0) => "0",
+        None => "missing",
+    }
+}
+
+fn duration_seconds_band(duration_seconds: Option<u32>) -> &'static str {
+    match duration_seconds {
+        Some(60..) => "60_plus",
+        Some(30..=59) => "30_59",
+        Some(10..=29) => "10_29",
+        Some(1..=9) => "1_9",
         Some(0) => "0",
         None => "missing",
     }
@@ -2283,6 +2302,7 @@ mod tests {
         let mut rights_risk = judged_sound("sound_a", 95, "shortlist_after_rights_review");
         rights_risk.judgement_rank = Some(1);
         rights_risk.trend_rank = Some(1);
+        rights_risk.duration_seconds = Some(41);
         rights_risk.candidate_post_count = Some(20);
         rights_risk.downloaded_video_count = Some(3);
         rights_risk.extracted_audio_count = Some(2);
@@ -2312,6 +2332,7 @@ mod tests {
         let mut metrics_risk = judged_sound("sound_b", 82, "shortlist_after_rights_review");
         metrics_risk.judgement_rank = Some(11);
         metrics_risk.trend_rank = Some(12);
+        metrics_risk.duration_seconds = Some(18);
         metrics_risk.candidate_post_count = Some(5);
         metrics_risk.downloaded_video_count = Some(1);
         metrics_risk.extracted_audio_count = Some(1);
@@ -2366,6 +2387,7 @@ mod tests {
         let mut weak_signal = judged_sound("sound_c", 65, "shortlist");
         weak_signal.judgement_rank = Some(26);
         weak_signal.trend_rank = Some(27);
+        weak_signal.duration_seconds = Some(7);
         weak_signal.downloaded_video_count = Some(0);
         weak_signal.extracted_audio_count = Some(0);
         weak_signal.usable_asset_pair_count = Some(0);
@@ -2394,6 +2416,7 @@ mod tests {
         let mut needs_review = judged_sound("sound_d", 40, "needs_review");
         needs_review.judgement_rank = Some(51);
         needs_review.trend_rank = Some(51);
+        needs_review.duration_seconds = Some(65);
         needs_review.downloaded_video_count = None;
         needs_review.extracted_audio_count = None;
         needs_review.usable_asset_pair_count = None;
@@ -2411,6 +2434,7 @@ mod tests {
             "local_download_path".to_string(),
         ];
         let mut skip_for_now = judged_sound("sound_e", 20, "skip_for_now");
+        skip_for_now.duration_seconds = None;
         skip_for_now.downloaded_video_count = None;
         skip_for_now.extracted_audio_count = None;
         skip_for_now.usable_asset_pair_count = None;
@@ -2517,6 +2541,36 @@ mod tests {
         assert!(
             summary
                 .judgement_rank_band_counts
+                .iter()
+                .any(|count| { count.band == "missing" && count.count == 1 })
+        );
+        assert!(
+            summary
+                .duration_seconds_band_counts
+                .iter()
+                .any(|count| { count.band == "1_9" && count.count == 1 })
+        );
+        assert!(
+            summary
+                .duration_seconds_band_counts
+                .iter()
+                .any(|count| { count.band == "10_29" && count.count == 1 })
+        );
+        assert!(
+            summary
+                .duration_seconds_band_counts
+                .iter()
+                .any(|count| { count.band == "30_59" && count.count == 1 })
+        );
+        assert!(
+            summary
+                .duration_seconds_band_counts
+                .iter()
+                .any(|count| { count.band == "60_plus" && count.count == 1 })
+        );
+        assert!(
+            summary
+                .duration_seconds_band_counts
                 .iter()
                 .any(|count| { count.band == "missing" && count.count == 1 })
         );
