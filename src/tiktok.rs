@@ -734,6 +734,13 @@ fn judge_manifest_entry(manifest_path: &Path, entry: &ManifestEntry) -> Result<J
         clip_id: entry.clip_id.clone(),
         country_code: entry.country_code.clone(),
         duration_seconds: entry.duration_seconds,
+        local_audio_path: entry.local_audio_path.clone(),
+        local_video_path: entry.local_video_path.clone(),
+        local_metadata_path: entry.local_metadata_path.clone(),
+        local_trend_path: entry.local_trend_path.clone(),
+        local_posts_path: entry.local_posts_path.clone(),
+        local_selection_path: entry.local_selection_path.clone(),
+        local_download_path: entry.local_download_path.clone(),
         downloaded_video_count,
         extracted_audio_count,
         usable_asset_pair_count,
@@ -1966,6 +1973,13 @@ mod tests {
             clip_id: Some(format!("{id}_clip")),
             country_code: Some("US".to_string()),
             duration_seconds: Some(12),
+            local_audio_path: format!("library/sounds/imported/{id}/audio.mp3"),
+            local_video_path: Some(format!("library/sounds/imported/{id}/video.mp4")),
+            local_metadata_path: format!("library/sounds/imported/{id}/metadata.json"),
+            local_trend_path: Some(format!("library/sounds/imported/{id}/trend.json")),
+            local_posts_path: Some(format!("library/sounds/imported/{id}/posts.json")),
+            local_selection_path: Some(format!("library/sounds/imported/{id}/selection.json")),
+            local_download_path: Some(format!("library/sounds/imported/{id}/download.json")),
             downloaded_video_count: Some(1),
             extracted_audio_count: Some(1),
             usable_asset_pair_count: Some(1),
@@ -2072,6 +2086,15 @@ mod tests {
         assert_eq!(judged.clip_id, Some("456".to_string()));
         assert_eq!(judged.country_code, Some("US".to_string()));
         assert_eq!(judged.duration_seconds, Some(12));
+        assert_eq!(
+            judged.local_audio_path,
+            "library/sounds/imported/example/audio.mp3"
+        );
+        assert_eq!(
+            judged.local_video_path,
+            Some("library/sounds/imported/example/video.mp4".to_string())
+        );
+        assert_eq!(judged.local_metadata_path, "missing-metadata.json");
         assert_eq!(judged.candidate_post_count, None);
         assert_eq!(judged.usable_asset_pair_count, Some(2));
         assert_eq!(judged.representative_engagement_count, Some(129_000));
