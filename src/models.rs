@@ -189,6 +189,7 @@ pub struct SoundJudgementSummary {
     pub score_band_counts: Vec<ScoreBandCount>,
     pub downloaded_video_coverage_counts: Vec<DownloadedVideoCoverageCount>,
     pub extracted_audio_coverage_counts: Vec<ExtractedAudioCoverageCount>,
+    pub usable_asset_pair_coverage_counts: Vec<UsableAssetPairCoverageCount>,
     pub candidate_post_coverage_counts: Vec<CandidatePostCoverageCount>,
     pub engagement_metric_coverage_counts: Vec<EngagementMetricCoverageCount>,
     pub representative_view_count_band_counts: Vec<RepresentativeViewCountBandCount>,
@@ -232,6 +233,12 @@ pub struct DownloadedVideoCoverageCount {
 #[derive(Debug, Serialize)]
 pub struct ExtractedAudioCoverageCount {
     pub extracted_audio_count: Option<usize>,
+    pub count: usize,
+}
+
+#[derive(Debug, Serialize)]
+pub struct UsableAssetPairCoverageCount {
+    pub usable_asset_pair_count: Option<usize>,
     pub count: usize,
 }
 
@@ -330,6 +337,7 @@ pub struct JudgedSound {
     pub platform: String,
     pub downloaded_video_count: Option<usize>,
     pub extracted_audio_count: Option<usize>,
+    pub usable_asset_pair_count: Option<usize>,
     pub candidate_post_count: Option<usize>,
     pub representative_view_count: Option<u64>,
     pub representative_like_count: Option<u64>,

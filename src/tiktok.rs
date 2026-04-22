@@ -716,6 +716,10 @@ fn judge_manifest_entry(manifest_path: &Path, entry: &ManifestEntry) -> Result<J
 
     let score = score.min(100);
     let recommended_action = recommended_action(score, &risks).to_string();
+    let usable_asset_pair_count = match (downloaded_video_count, extracted_audio_count) {
+        (Some(downloaded), Some(extracted)) => Some(downloaded.min(extracted)),
+        _ => None,
+    };
 
     Ok(JudgedSound {
         sound_id: entry.id.clone(),
@@ -726,6 +730,7 @@ fn judge_manifest_entry(manifest_path: &Path, entry: &ManifestEntry) -> Result<J
         platform: entry.platform.clone(),
         downloaded_video_count,
         extracted_audio_count,
+        usable_asset_pair_count,
         candidate_post_count,
         representative_view_count,
         representative_like_count,
@@ -1951,6 +1956,7 @@ mod tests {
             platform: "tiktok".to_string(),
             downloaded_video_count: Some(1),
             extracted_audio_count: Some(1),
+            usable_asset_pair_count: Some(1),
             candidate_post_count: None,
             representative_view_count: None,
             representative_like_count: None,
