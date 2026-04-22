@@ -549,6 +549,11 @@ fn judge_manifest_entry(manifest_path: &Path, entry: &ManifestEntry) -> Result<J
             )
             .then_some(1)
         });
+    let candidate_post_count = match metadata_usize(&metadata, &[&["selection", "candidate_count"]])
+    {
+        Some(count) => Some(count),
+        None => candidate_post_count_from_selection_artifact(manifest_path, entry)?,
+    };
     let representative_view_count = entry.representative_view_count.or_else(|| {
         metadata_u64(
             &metadata,
@@ -721,6 +726,7 @@ fn judge_manifest_entry(manifest_path: &Path, entry: &ManifestEntry) -> Result<J
         platform: entry.platform.clone(),
         downloaded_video_count,
         extracted_audio_count,
+        candidate_post_count,
         representative_view_count,
         representative_like_count,
         representative_engagement_count,
@@ -1505,6 +1511,44 @@ fn read_optional_metadata(manifest_path: &Path, metadata_path: &str) -> Result<O
         .map(Some)
 }
 
+fn candidate_post_count_from_selection_artifact(
+    manifest_path: &Path,
+    entry: &ManifestEntry,
+) -> Result<Option<usize>> {
+    let Some(selection_path) = entry
+        .local_selection_path
+        .as_deref()
+        .filter(|path| !path.trim().is_empty())
+    else {
+        return Ok(None);
+    };
+
+    let path = resolve_library_path(manifest_path, selection_path);
+    if !path.exists() {
+        return Ok(None);
+    }
+
+    let bytes = fs::read(&path).with_context(|| format!("failed to read {}", path.display()))?;
+    let value: Value = serde_json::from_slice(&bytes)
+        .with_context(|| format!("failed to parse {}", path.display()))?;
+    let metadata = Some(value);
+    Ok(metadata_usize(
+        &metadata,
+        &[
+            &["candidate_count"],
+            &["normalized_candidate_count"],
+            &["raw_dataset_count"],
+        ],
+    )
+    .or_else(|| {
+        metadata
+            .as_ref()
+            .and_then(|value| value.get("candidates"))
+            .and_then(Value::as_array)
+            .map(Vec::len)
+    }))
+}
+
 fn representative_engagement_from_posts_artifact(
     manifest_path: &Path,
     entry: &ManifestEntry,
@@ -1907,6 +1951,7 @@ mod tests {
             platform: "tiktok".to_string(),
             downloaded_video_count: Some(1),
             extracted_audio_count: Some(1),
+            candidate_post_count: None,
             representative_view_count: None,
             representative_like_count: None,
             representative_engagement_count: None,
@@ -1997,6 +2042,7 @@ mod tests {
 
         assert_eq!(judged.score, 100);
         assert_eq!(judged.recommended_action, "shortlist_after_rights_review");
+        assert_eq!(judged.candidate_post_count, None);
         assert_eq!(judged.representative_engagement_count, Some(129_000));
         assert_eq!(judged.representative_like_rate_per_1000_views, Some(83));
         assert_eq!(
@@ -2038,6 +2084,7 @@ mod tests {
         let _ = std::fs::remove_dir_all(&temp_dir);
         std::fs::create_dir_all(&temp_dir).expect("create temp dir");
         let posts_path = temp_dir.join("posts.json");
+        let selection_path = temp_dir.join("selection.json");
         std::fs::write(
             &posts_path,
             serde_json::to_vec_pretty(&json!({
@@ -2059,6 +2106,14 @@ mod tests {
             .expect("serialize posts"),
         )
         .expect("write posts");
+        std::fs::write(
+            &selection_path,
+            serde_json::to_vec_pretty(&json!({
+                "normalized_candidate_count": 20
+            }))
+            .expect("serialize selection"),
+        )
+        .expect("write selection");
 
         let entry = ManifestEntry {
             id: "tiktok_sound_123".to_string(),
@@ -2081,7 +2136,7 @@ mod tests {
             local_video_path: Some("library/sounds/imported/example/video.mp4".to_string()),
             local_trend_path: None,
             local_posts_path: Some(posts_path.display().to_string()),
-            local_selection_path: None,
+            local_selection_path: Some(selection_path.display().to_string()),
             local_download_path: None,
             local_videos_dir: Some("library/sounds/imported/example/videos".to_string()),
             local_audios_dir: Some("library/sounds/imported/example/audios".to_string()),
@@ -2100,6 +2155,7 @@ mod tests {
         let judged = judge_manifest_entry(Path::new("library/sounds/manifest.json"), &entry)
             .expect("judged sound");
 
+        assert_eq!(judged.candidate_post_count, Some(20));
         assert_eq!(judged.representative_view_count, Some(37_548_076));
         assert_eq!(judged.representative_like_count, Some(7_427_697));
         assert_eq!(judged.representative_engagement_count, Some(8_854_703));
