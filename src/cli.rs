@@ -22,6 +22,12 @@ use crate::{
 };
 
 const SOUND_JUDGEMENT_SORT_ORDER: &str = "score_desc_trend_rank_asc_sound_id_asc";
+const REPRESENTATIVE_ENGAGEMENT_METRIC_FIELDS: [&str; 4] = [
+    "representative_view_count",
+    "representative_like_count",
+    "representative_comment_count",
+    "representative_share_count",
+];
 
 #[derive(Debug, Parser)]
 #[command(
@@ -425,6 +431,9 @@ struct JudgeSoundArgs {
 
     #[arg(long)]
     min_representative_engagement_metrics: Option<usize>,
+
+    #[arg(long = "require-engagement-metric-field")]
+    required_engagement_metric_fields: Vec<String>,
 }
 
 impl JudgeSoundArgs {
@@ -443,6 +452,24 @@ impl JudgeSoundArgs {
             .is_some_and(|count| count > 4)
         {
             bail!("--min-representative-engagement-metrics must be between 0 and 4")
+        }
+        if self
+            .required_engagement_metric_fields
+            .iter()
+            .any(|field| field.trim().is_empty())
+        {
+            bail!("--require-engagement-metric-field values must not be empty")
+        }
+        if let Some(field) = self
+            .required_engagement_metric_fields
+            .iter()
+            .map(|field| field.trim())
+            .find(|field| !is_representative_engagement_metric_field(field))
+        {
+            bail!(
+                "--require-engagement-metric-field `{field}` must be one of: {}",
+                REPRESENTATIVE_ENGAGEMENT_METRIC_FIELDS.join(", ")
+            )
         }
         if self
             .platforms
@@ -490,6 +517,7 @@ impl JudgeSoundArgs {
             min_representative_views: self.min_representative_views,
             min_representative_likes: self.min_representative_likes,
             min_representative_engagement_metrics: self.min_representative_engagement_metrics,
+            required_engagement_metric_fields: self.required_engagement_metric_fields.clone(),
         };
         let sounds = filter_judged_sounds(
             sounds,
@@ -505,6 +533,7 @@ impl JudgeSoundArgs {
             self.min_representative_views,
             self.min_representative_likes,
             self.min_representative_engagement_metrics,
+            &self.required_engagement_metric_fields,
             self.top,
         );
         let filtered_out_count = total_count - sounds.len();
@@ -620,6 +649,7 @@ fn filter_judged_sounds(
     min_representative_views: Option<u64>,
     min_representative_likes: Option<u64>,
     min_representative_engagement_metrics: Option<usize>,
+    required_engagement_metric_fields: &[String],
     top: Option<usize>,
 ) -> Vec<JudgedSound> {
     if let Some(min_score) = min_score {
@@ -693,6 +723,20 @@ fn filter_judged_sounds(
         });
     }
 
+    if !required_engagement_metric_fields.is_empty() {
+        sounds.retain(|sound| {
+            required_engagement_metric_fields
+                .iter()
+                .map(|field| field.trim())
+                .all(|required| {
+                    sound
+                        .representative_engagement_metric_fields
+                        .iter()
+                        .any(|field| field == required)
+                })
+        });
+    }
+
     if let Some(top) = top {
         sounds.truncate(top);
     }
@@ -714,6 +758,10 @@ fn matches_any_excluded_risk(risk: &str, excluded_risks: &[String]) -> bool {
     excluded_risks
         .iter()
         .any(|excluded| risk.contains(&excluded.trim().to_ascii_lowercase()))
+}
+
+fn is_representative_engagement_metric_field(field: &str) -> bool {
+    REPRESENTATIVE_ENGAGEMENT_METRIC_FIELDS.contains(&field)
 }
 
 #[derive(Debug, Args)]
@@ -843,6 +891,7 @@ mod tests {
             None,
             None,
             None,
+            &[],
             Some(1),
         );
 
@@ -872,6 +921,7 @@ mod tests {
             None,
             None,
             None,
+            &[],
             None,
         );
 
@@ -899,6 +949,7 @@ mod tests {
             None,
             None,
             None,
+            &[],
             None,
         );
 
@@ -937,6 +988,7 @@ mod tests {
             None,
             None,
             None,
+            &[],
             None,
         );
 
@@ -968,6 +1020,7 @@ mod tests {
             None,
             None,
             None,
+            &[],
             None,
         );
 
@@ -999,6 +1052,7 @@ mod tests {
             Some(1_000_000),
             Some(100_000),
             None,
+            &[],
             None,
         );
 
@@ -1028,6 +1082,46 @@ mod tests {
             None,
             None,
             Some(3),
+            &[],
+            None,
+        );
+
+        assert_eq!(filtered.len(), 1);
+        assert_eq!(filtered[0].sound_id, "sound_a");
+    }
+
+    #[test]
+    fn filter_judged_sounds_requires_specific_engagement_metric_fields() {
+        let mut complete_metrics = judged_sound("sound_a", 95, "shortlist_after_rights_review");
+        complete_metrics.representative_engagement_metric_fields = vec![
+            "representative_view_count".to_string(),
+            "representative_like_count".to_string(),
+            "representative_comment_count".to_string(),
+            "representative_share_count".to_string(),
+        ];
+        let mut like_only = judged_sound("sound_b", 95, "shortlist_after_rights_review");
+        like_only.representative_engagement_metric_fields =
+            vec!["representative_like_count".to_string()];
+        let missing_metrics = judged_sound("sound_c", 95, "shortlist_after_rights_review");
+
+        let filtered = filter_judged_sounds(
+            vec![complete_metrics, like_only, missing_metrics],
+            None,
+            None,
+            &[],
+            &[],
+            &[],
+            &[],
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            &[
+                "representative_view_count".to_string(),
+                "representative_like_count".to_string(),
+            ],
             None,
         );
 
@@ -1060,6 +1154,7 @@ mod tests {
             None,
             None,
             None,
+            &[],
             None,
         );
 
@@ -1096,6 +1191,7 @@ mod tests {
             None,
             None,
             None,
+            &[],
             None,
         );
 
