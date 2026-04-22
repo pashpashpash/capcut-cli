@@ -390,6 +390,9 @@ struct JudgeSoundArgs {
     #[arg(long)]
     min_score: Option<u32>,
 
+    #[arg(long)]
+    max_trend_rank: Option<u32>,
+
     #[arg(long = "recommended-action")]
     recommended_actions: Vec<String>,
 
@@ -417,6 +420,9 @@ impl JudgeSoundArgs {
         if self.min_score.is_some_and(|score| score > 100) {
             bail!("--min-score must be between 0 and 100")
         }
+        if self.max_trend_rank == Some(0) {
+            bail!("--max-trend-rank must be greater than 0")
+        }
         if self
             .recommended_actions
             .iter()
@@ -438,6 +444,7 @@ impl JudgeSoundArgs {
         let filters = SoundJudgementFilters {
             top: self.top,
             min_score: self.min_score,
+            max_trend_rank: self.max_trend_rank,
             recommended_actions: self.recommended_actions.clone(),
             excluded_risks: self.excluded_risks.clone(),
             min_downloaded_videos: self.min_downloaded_videos,
@@ -448,6 +455,7 @@ impl JudgeSoundArgs {
         let sounds = filter_judged_sounds(
             sounds,
             self.min_score,
+            self.max_trend_rank,
             &self.recommended_actions,
             &self.excluded_risks,
             self.min_downloaded_videos,
@@ -528,6 +536,7 @@ fn score_band(score: u32) -> &'static str {
 fn filter_judged_sounds(
     mut sounds: Vec<JudgedSound>,
     min_score: Option<u32>,
+    max_trend_rank: Option<u32>,
     recommended_actions: &[String],
     excluded_risks: &[String],
     min_downloaded_videos: Option<usize>,
@@ -538,6 +547,10 @@ fn filter_judged_sounds(
 ) -> Vec<JudgedSound> {
     if let Some(min_score) = min_score {
         sounds.retain(|sound| sound.score >= min_score);
+    }
+
+    if let Some(max_trend_rank) = max_trend_rank {
+        sounds.retain(|sound| sound.trend_rank.is_some_and(|rank| rank <= max_trend_rank));
     }
 
     if !recommended_actions.is_empty() {
@@ -705,6 +718,7 @@ mod tests {
         let filtered = filter_judged_sounds(
             sounds,
             Some(50),
+            None,
             &["USE_FIRST".to_string(), "shortlist".to_string()],
             &[],
             None,
@@ -719,6 +733,31 @@ mod tests {
     }
 
     #[test]
+    fn filter_judged_sounds_applies_trend_rank_threshold() {
+        let mut top_rank = judged_sound("sound_a", 95, "shortlist_after_rights_review");
+        top_rank.trend_rank = Some(3);
+        let mut low_rank = judged_sound("sound_b", 95, "shortlist_after_rights_review");
+        low_rank.trend_rank = Some(12);
+        let missing_rank = judged_sound("sound_c", 95, "shortlist_after_rights_review");
+
+        let filtered = filter_judged_sounds(
+            vec![top_rank, low_rank, missing_rank],
+            None,
+            Some(10),
+            &[],
+            &[],
+            None,
+            None,
+            None,
+            None,
+            None,
+        );
+
+        assert_eq!(filtered.len(), 1);
+        assert_eq!(filtered[0].sound_id, "sound_a");
+    }
+
+    #[test]
     fn filter_judged_sounds_applies_asset_coverage_thresholds() {
         let mut strong_asset = judged_sound("sound_a", 95, "shortlist_after_rights_review");
         strong_asset.downloaded_video_count = Some(3);
@@ -730,6 +769,7 @@ mod tests {
 
         let filtered = filter_judged_sounds(
             vec![strong_asset, weak_asset, missing_counts],
+            None,
             None,
             &[],
             &[],
@@ -757,6 +797,7 @@ mod tests {
         let filtered = filter_judged_sounds(
             vec![high_engagement, low_likes, missing_metrics],
             None,
+            None,
             &[],
             &[],
             None,
@@ -783,6 +824,7 @@ mod tests {
 
         let filtered = filter_judged_sounds(
             vec![rights_risk, metrics_risk],
+            None,
             None,
             &[],
             &["RIGHTS STILL NEED".to_string()],
