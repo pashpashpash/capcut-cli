@@ -172,6 +172,8 @@ pub struct SoundJudgementFilters {
     pub min_extracted_audios: Option<usize>,
     pub min_usable_asset_pairs: Option<usize>,
     pub min_candidate_posts: Option<usize>,
+    pub min_duration_seconds: Option<u32>,
+    pub max_duration_seconds: Option<u32>,
     pub min_local_artifact_paths: Option<usize>,
     pub required_local_artifact_path_fields: Vec<String>,
     pub min_representative_views: Option<u64>,

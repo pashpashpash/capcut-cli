@@ -454,6 +454,12 @@ struct JudgeSoundArgs {
     min_candidate_posts: Option<usize>,
 
     #[arg(long)]
+    min_duration_seconds: Option<u32>,
+
+    #[arg(long)]
+    max_duration_seconds: Option<u32>,
+
+    #[arg(long)]
     min_local_artifact_paths: Option<usize>,
 
     #[arg(long = "require-local-artifact-path-field")]
@@ -506,6 +512,16 @@ impl JudgeSoundArgs {
         }
         if self.max_judgement_rank == Some(0) {
             bail!("--max-judgement-rank must be greater than 0")
+        }
+        if self.max_duration_seconds == Some(0) {
+            bail!("--max-duration-seconds must be greater than 0")
+        }
+        if let (Some(min_duration_seconds), Some(max_duration_seconds)) =
+            (self.min_duration_seconds, self.max_duration_seconds)
+        {
+            if min_duration_seconds > max_duration_seconds {
+                bail!("--min-duration-seconds must be less than or equal to --max-duration-seconds")
+            }
         }
         if self
             .min_representative_engagement_metrics
@@ -602,6 +618,8 @@ impl JudgeSoundArgs {
             min_extracted_audios: self.min_extracted_audios,
             min_usable_asset_pairs: self.min_usable_asset_pairs,
             min_candidate_posts: self.min_candidate_posts,
+            min_duration_seconds: self.min_duration_seconds,
+            max_duration_seconds: self.max_duration_seconds,
             min_local_artifact_paths: self.min_local_artifact_paths,
             required_local_artifact_path_fields: self.required_local_artifact_path_fields.clone(),
             min_representative_views: self.min_representative_views,
@@ -635,6 +653,8 @@ impl JudgeSoundArgs {
             self.min_extracted_audios,
             self.min_usable_asset_pairs,
             self.min_candidate_posts,
+            self.min_duration_seconds,
+            self.max_duration_seconds,
             self.min_representative_views,
             self.min_representative_likes,
             self.min_representative_engagements,
@@ -1136,6 +1156,8 @@ fn filter_judged_sounds(
     min_extracted_audios: Option<usize>,
     min_usable_asset_pairs: Option<usize>,
     min_candidate_posts: Option<usize>,
+    min_duration_seconds: Option<u32>,
+    max_duration_seconds: Option<u32>,
     min_representative_views: Option<u64>,
     min_representative_likes: Option<u64>,
     min_representative_engagements: Option<u64>,
@@ -1223,6 +1245,22 @@ fn filter_judged_sounds(
     if let Some(min_candidate_posts) = min_candidate_posts {
         sounds
             .retain(|sound| sound.candidate_post_count.unwrap_or_default() >= min_candidate_posts);
+    }
+
+    if let Some(min_duration_seconds) = min_duration_seconds {
+        sounds.retain(|sound| {
+            sound
+                .duration_seconds
+                .is_some_and(|duration| duration >= min_duration_seconds)
+        });
+    }
+
+    if let Some(max_duration_seconds) = max_duration_seconds {
+        sounds.retain(|sound| {
+            sound
+                .duration_seconds
+                .is_some_and(|duration| duration <= max_duration_seconds)
+        });
     }
 
     if let Some(min_representative_views) = min_representative_views {
@@ -1544,6 +1582,8 @@ mod tests {
             None,
             None,
             None,
+            None,
+            None,
             &[],
             Some(1),
         );
@@ -1569,6 +1609,8 @@ mod tests {
             &[],
             &[],
             &[],
+            None,
+            None,
             None,
             None,
             None,
@@ -1626,6 +1668,8 @@ mod tests {
             None,
             None,
             None,
+            None,
+            None,
             &[],
             None,
         );
@@ -1649,6 +1693,8 @@ mod tests {
             &[],
             &[],
             &[],
+            None,
+            None,
             None,
             None,
             None,
@@ -1715,6 +1761,8 @@ mod tests {
             None,
             None,
             None,
+            None,
+            None,
             &[],
             None,
         );
@@ -1745,6 +1793,8 @@ mod tests {
             &[],
             &[],
             Some(2),
+            None,
+            None,
             None,
             None,
             None,
@@ -1800,6 +1850,54 @@ mod tests {
             Some(2),
             Some(2),
             Some(10),
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            &[],
+            None,
+        );
+
+        assert_eq!(filtered.len(), 1);
+        assert_eq!(filtered[0].sound_id, "sound_a");
+    }
+
+    #[test]
+    fn filter_judged_sounds_applies_duration_thresholds() {
+        let mut usable_duration = judged_sound("sound_a", 95, "shortlist_after_rights_review");
+        usable_duration.duration_seconds = Some(18);
+        let mut too_short = judged_sound("sound_b", 95, "shortlist_after_rights_review");
+        too_short.duration_seconds = Some(7);
+        let mut too_long = judged_sound("sound_c", 95, "shortlist_after_rights_review");
+        too_long.duration_seconds = Some(65);
+        let mut missing_duration = judged_sound("sound_d", 95, "shortlist_after_rights_review");
+        missing_duration.duration_seconds = None;
+
+        let filtered = filter_judged_sounds(
+            vec![usable_duration, too_short, too_long, missing_duration],
+            None,
+            None,
+            None,
+            &[],
+            &[],
+            &[],
+            &[],
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            Some(10),
+            Some(30),
             None,
             None,
             None,
@@ -1968,6 +2066,8 @@ mod tests {
             None,
             None,
             None,
+            None,
+            None,
             Some(1_000_000),
             Some(100_000),
             Some(250_000),
@@ -2003,6 +2103,8 @@ mod tests {
             &[],
             &[],
             &[],
+            None,
+            None,
             None,
             None,
             None,
@@ -2066,6 +2168,8 @@ mod tests {
             None,
             None,
             None,
+            None,
+            None,
             &[
                 "representative_view_count".to_string(),
                 "representative_like_count".to_string(),
@@ -2097,6 +2201,8 @@ mod tests {
             &[],
             &[],
             &["RIGHTS STILL NEED".to_string()],
+            None,
+            None,
             None,
             None,
             None,
@@ -2147,6 +2253,8 @@ mod tests {
             &[],
             None,
             Some(1),
+            None,
+            None,
             None,
             None,
             None,

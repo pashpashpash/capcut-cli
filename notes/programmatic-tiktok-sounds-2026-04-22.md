@@ -104,6 +104,7 @@ Implemented refinements:
 - judgement summaries now include `reason_count_coverage_counts` and `risk_count_coverage_counts`, so agents can compare signal and blocker density before opening individual rows
 - judgement summaries now include `trend_rank_band_counts`, so agents can compare top-10, mid-chart, long-tail, and unranked sound distribution before opening individual rows
 - judgement summaries now include `judgement_rank_band_counts`, so agents can compare full-library top-N, mid-rank, long-tail, and unranked distribution before opening individual rows
+- `--min-duration-seconds` and `--max-duration-seconds` let production shortlists require sounds that fit the target edit length before opening individual rows
 - `--min-reason-count` lets shortlists require enough positive evidence before returning a sound, complementing `--max-risk-count` for blocker density
 - `--max-judgement-rank` keeps filtered passes inside the full-library top N by score, trend rank, and sound id, so narrow filters do not accidentally surface low-ranked candidates
 - returned sounds include source URLs and TikTok identifiers (`source_url`, `source_video_url`, `song_id`, `clip_id`, `country_code`, and `duration_seconds`), so shortlisted rows remain traceable without reopening the manifest
