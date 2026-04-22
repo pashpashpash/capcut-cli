@@ -92,6 +92,7 @@ Implemented refinements:
 - judgement summaries now include `representative_engagement_rate_band_counts`, so agents can spot missing, weak, or high-density virality evidence before opening individual rows
 - judgement summaries now include `representative_view_count_band_counts`, so agents can see reach distribution before opening individual rows
 - returned sounds include `representative_comment_rate_per_1000_views`, and `--min-representative-comment-rate-per-1000-views` lets shortlists require discussion density relative to reach instead of raw comment counts alone
+- judgement summaries now include `representative_comment_count_band_counts`, so agents can compare absolute discussion-volume distribution before opening individual rows
 - judgement summaries now include `representative_comment_rate_band_counts`, so agents can compare discussion-density distribution before opening individual rows
 - returned sounds include `representative_share_rate_per_1000_views`, and `--min-representative-share-rate-per-1000-views` lets shortlists require spread density relative to reach instead of raw share counts alone
 - judgement summaries now include `representative_share_rate_band_counts`, so agents can compare spread-density distribution before opening individual rows
