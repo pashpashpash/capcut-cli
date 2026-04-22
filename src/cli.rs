@@ -10,17 +10,18 @@ use crate::{
     models::{
         AppReport, AuthReport, CandidatePostCoverageCount, DiscoverSource, DiscoveryReport,
         DownloadedVideoCoverageCount, EngagementMetricCoverageCount, ExtractedAudioCoverageCount,
-        JudgedSound, LibraryReport, LocalArtifactPathCoverageCount, LocalArtifactPathFieldCount,
-        MediaReport, MissingEngagementMetricFieldCount, MissingLocalArtifactPathFieldCount,
-        PipelineStep, PipelineStepKind, PlatformCount, ReasonCount, ReasonCountCoverageCount,
-        RecommendedActionCount, RepresentativeCommentCountBandCount,
-        RepresentativeCommentRateBandCount, RepresentativeEngagementCountBandCount,
-        RepresentativeEngagementMetricFieldCount, RepresentativeEngagementRateBandCount,
-        RepresentativeLikeCountBandCount, RepresentativeLikeRateBandCount,
-        RepresentativeShareCountBandCount, RepresentativeShareRateBandCount,
-        RepresentativeViewCountBandCount, RiskCount, RiskCountCoverageCount, ScoreBandCount,
-        SoundImportReport, SoundJudgementFilters, SoundJudgementReport, SoundJudgementSummary,
-        TrendRankBandCount, UpdateReport, UsableAssetPairCoverageCount,
+        JudgedSound, JudgementRankBandCount, LibraryReport, LocalArtifactPathCoverageCount,
+        LocalArtifactPathFieldCount, MediaReport, MissingEngagementMetricFieldCount,
+        MissingLocalArtifactPathFieldCount, PipelineStep, PipelineStepKind, PlatformCount,
+        ReasonCount, ReasonCountCoverageCount, RecommendedActionCount,
+        RepresentativeCommentCountBandCount, RepresentativeCommentRateBandCount,
+        RepresentativeEngagementCountBandCount, RepresentativeEngagementMetricFieldCount,
+        RepresentativeEngagementRateBandCount, RepresentativeLikeCountBandCount,
+        RepresentativeLikeRateBandCount, RepresentativeShareCountBandCount,
+        RepresentativeShareRateBandCount, RepresentativeViewCountBandCount, RiskCount,
+        RiskCountCoverageCount, ScoreBandCount, SoundImportReport, SoundJudgementFilters,
+        SoundJudgementReport, SoundJudgementSummary, TrendRankBandCount, UpdateReport,
+        UsableAssetPairCoverageCount,
     },
     tiktok::{
         self, DEFAULT_IMPORT_OUTPUT_DIR, ImportTrendingSoundsOptions, LIBRARY_MANIFEST_PATH,
@@ -677,6 +678,7 @@ fn summarize_judged_sounds(sounds: &[JudgedSound]) -> SoundJudgementSummary {
     let mut platform_counts = BTreeMap::new();
     let mut score_band_counts = BTreeMap::new();
     let mut trend_rank_band_counts = BTreeMap::new();
+    let mut judgement_rank_band_counts = BTreeMap::new();
     let mut reason_count_coverage_counts = BTreeMap::new();
     let mut risk_count_coverage_counts = BTreeMap::new();
     let mut downloaded_video_coverage_counts = BTreeMap::new();
@@ -711,6 +713,9 @@ fn summarize_judged_sounds(sounds: &[JudgedSound]) -> SoundJudgementSummary {
             .or_insert(0) += 1;
         *trend_rank_band_counts
             .entry(trend_rank_band(sound.trend_rank).to_string())
+            .or_insert(0) += 1;
+        *judgement_rank_band_counts
+            .entry(judgement_rank_band(sound.judgement_rank).to_string())
             .or_insert(0) += 1;
         *reason_count_coverage_counts
             .entry(sound.reasons.len())
@@ -828,6 +833,10 @@ fn summarize_judged_sounds(sounds: &[JudgedSound]) -> SoundJudgementSummary {
         trend_rank_band_counts: trend_rank_band_counts
             .into_iter()
             .map(|(band, count)| TrendRankBandCount { band, count })
+            .collect(),
+        judgement_rank_band_counts: judgement_rank_band_counts
+            .into_iter()
+            .map(|(band, count)| JudgementRankBandCount { band, count })
             .collect(),
         reason_count_coverage_counts: reason_count_coverage_counts
             .into_iter()
@@ -993,6 +1002,17 @@ fn score_band(score: u32) -> &'static str {
 }
 
 fn trend_rank_band(rank: Option<u32>) -> &'static str {
+    match rank {
+        Some(1..=10) => "1_10",
+        Some(11..=25) => "11_25",
+        Some(26..=50) => "26_50",
+        Some(51..) => "51_plus",
+        Some(0) => "0",
+        None => "missing",
+    }
+}
+
+fn judgement_rank_band(rank: Option<usize>) -> &'static str {
     match rank {
         Some(1..=10) => "1_10",
         Some(11..=25) => "11_25",
@@ -2153,6 +2173,7 @@ mod tests {
     #[test]
     fn summarize_judged_sounds_counts_actions_score_bands_reasons_and_risks() {
         let mut rights_risk = judged_sound("sound_a", 95, "shortlist_after_rights_review");
+        rights_risk.judgement_rank = Some(1);
         rights_risk.trend_rank = Some(1);
         rights_risk.candidate_post_count = Some(20);
         rights_risk.downloaded_video_count = Some(3);
@@ -2181,6 +2202,7 @@ mod tests {
             .risks
             .push("Rights still need manual verification before production use".to_string());
         let mut metrics_risk = judged_sound("sound_b", 82, "shortlist_after_rights_review");
+        metrics_risk.judgement_rank = Some(11);
         metrics_risk.trend_rank = Some(12);
         metrics_risk.candidate_post_count = Some(5);
         metrics_risk.downloaded_video_count = Some(1);
@@ -2234,6 +2256,7 @@ mod tests {
             "representative_share_count".to_string(),
         ];
         let mut weak_signal = judged_sound("sound_c", 65, "shortlist");
+        weak_signal.judgement_rank = Some(26);
         weak_signal.trend_rank = Some(27);
         weak_signal.downloaded_video_count = Some(0);
         weak_signal.extracted_audio_count = Some(0);
@@ -2261,6 +2284,7 @@ mod tests {
             "local_download_path".to_string(),
         ];
         let mut needs_review = judged_sound("sound_d", 40, "needs_review");
+        needs_review.judgement_rank = Some(51);
         needs_review.trend_rank = Some(51);
         needs_review.downloaded_video_count = None;
         needs_review.extracted_audio_count = None;
@@ -2355,6 +2379,36 @@ mod tests {
         assert!(
             summary
                 .trend_rank_band_counts
+                .iter()
+                .any(|count| { count.band == "missing" && count.count == 1 })
+        );
+        assert!(
+            summary
+                .judgement_rank_band_counts
+                .iter()
+                .any(|count| { count.band == "1_10" && count.count == 1 })
+        );
+        assert!(
+            summary
+                .judgement_rank_band_counts
+                .iter()
+                .any(|count| { count.band == "11_25" && count.count == 1 })
+        );
+        assert!(
+            summary
+                .judgement_rank_band_counts
+                .iter()
+                .any(|count| { count.band == "26_50" && count.count == 1 })
+        );
+        assert!(
+            summary
+                .judgement_rank_band_counts
+                .iter()
+                .any(|count| { count.band == "51_plus" && count.count == 1 })
+        );
+        assert!(
+            summary
+                .judgement_rank_band_counts
                 .iter()
                 .any(|count| { count.band == "missing" && count.count == 1 })
         );
