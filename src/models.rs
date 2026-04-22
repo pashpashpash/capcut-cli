@@ -146,6 +146,7 @@ pub struct FailedSoundImport {
 #[derive(Debug, Serialize)]
 pub struct SoundJudgementReport {
     pub manifest_path: String,
+    pub total_count: usize,
     pub judged_count: usize,
     pub sounds: Vec<JudgedSound>,
 }

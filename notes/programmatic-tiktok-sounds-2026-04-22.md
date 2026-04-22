@@ -46,6 +46,7 @@ Add a local judgement/report command over imported sounds before adding more net
 
 ```bash
 capcut-cli library sound judge --manifest library/sounds/manifest.json
+capcut-cli library sound judge --manifest library/sounds/manifest.json --min-score 75 --top 3
 ```
 
 The command should be offline and deterministic. It should read the committed manifest plus per-sound metadata and output JSON with:
@@ -66,6 +67,8 @@ The command should be offline and deterministic. It should read the committed ma
 - `recommended_action`
 
 This makes the next trust pass concrete: "given 20 imported sounds, surface the best 3 and explain why." That is the judgement layer the Discord discussion keeps orbiting around, and it gives agents a better target than blindly importing more assets.
+
+Implemented refinement: the judgement command now supports `--min-score`, repeated `--recommended-action`, and `--top`, so an agent can ask for a shortlist directly without post-processing the JSON dump.
 
 ## Provider ladder
 

@@ -126,6 +126,12 @@ Run an offline judgement pass over the local sound manifest:
 cargo run -- library sound judge
 ```
 
+Surface only the strongest candidates:
+
+```bash
+cargo run -- library sound judge --min-score 75 --recommended-action shortlist_after_rights_review --top 3
+```
+
 The report scores each sound using recorded trend rank, downloaded/extracted asset coverage, representative engagement metrics when present, and provenance/rights risks. This is the deterministic "what deserves attention, and why?" pass before importing or composing more assets.
 
 ## Output layout
@@ -188,7 +194,7 @@ cargo run -- discover tiktok-sounds --limit 10
 cargo run -- discover x-clips --query "ai agents" --limit 10
 cargo run -- library plan sound
 cargo run -- library sound import-tiktok-trending --resolver-actor-id "<novi actor id>" --limit 3 --max-posts 20 --download-attempts 5
-cargo run -- library sound judge
+cargo run -- library sound judge --top 3 --min-score 75
 cargo run -- update --bin-path "$HOME/.local/bin/capcut-cli"
 cargo run -- compose --sound sound_123 --clip clip_a --clip clip_b --duration-seconds 30
 ```

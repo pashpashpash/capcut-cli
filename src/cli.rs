@@ -7,8 +7,9 @@ use crate::{
     apify,
     config::{self, APIFY_CONFIG_ENV, TIKTOK_SOUND_RESOLVER_ACTOR_ID_ENV},
     models::{
-        AppReport, AuthReport, DiscoverSource, DiscoveryReport, LibraryReport, MediaReport,
-        PipelineStep, PipelineStepKind, SoundImportReport, SoundJudgementReport, UpdateReport,
+        AppReport, AuthReport, DiscoverSource, DiscoveryReport, JudgedSound, LibraryReport,
+        MediaReport, PipelineStep, PipelineStepKind, SoundImportReport, SoundJudgementReport,
+        UpdateReport,
     },
     tiktok::{
         self, DEFAULT_IMPORT_OUTPUT_DIR, ImportTrendingSoundsOptions, LIBRARY_MANIFEST_PATH,
@@ -380,18 +381,70 @@ impl ImportTiktokTrendingArgs {
 struct JudgeSoundArgs {
     #[arg(long, default_value = LIBRARY_MANIFEST_PATH)]
     manifest: PathBuf,
+
+    #[arg(long)]
+    top: Option<usize>,
+
+    #[arg(long)]
+    min_score: Option<u32>,
+
+    #[arg(long = "recommended-action")]
+    recommended_actions: Vec<String>,
 }
 
 impl JudgeSoundArgs {
     fn run(self) -> Result<AppReport> {
+        if self.top == Some(0) {
+            bail!("--top must be greater than 0")
+        }
+        if self.min_score.is_some_and(|score| score > 100) {
+            bail!("--min-score must be between 0 and 100")
+        }
+        if self
+            .recommended_actions
+            .iter()
+            .any(|action| action.trim().is_empty())
+        {
+            bail!("--recommended-action values must not be empty")
+        }
+
         let sounds = tiktok::judge_sound_library(&self.manifest)?;
+        let total_count = sounds.len();
+        let sounds =
+            filter_judged_sounds(sounds, self.min_score, &self.recommended_actions, self.top);
 
         Ok(AppReport::SoundJudgement(SoundJudgementReport {
             manifest_path: self.manifest.display().to_string(),
+            total_count,
             judged_count: sounds.len(),
             sounds,
         }))
     }
+}
+
+fn filter_judged_sounds(
+    mut sounds: Vec<JudgedSound>,
+    min_score: Option<u32>,
+    recommended_actions: &[String],
+    top: Option<usize>,
+) -> Vec<JudgedSound> {
+    if let Some(min_score) = min_score {
+        sounds.retain(|sound| sound.score >= min_score);
+    }
+
+    if !recommended_actions.is_empty() {
+        sounds.retain(|sound| {
+            recommended_actions
+                .iter()
+                .any(|action| sound.recommended_action.eq_ignore_ascii_case(action.trim()))
+        });
+    }
+
+    if let Some(top) = top {
+        sounds.truncate(top);
+    }
+
+    sounds
 }
 
 #[derive(Debug, Args)]
@@ -465,5 +518,50 @@ impl UpdateArgs {
             download_url: report.download_url,
             install_path: report.install_path,
         }))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn judged_sound(id: &str, score: u32, recommended_action: &str) -> JudgedSound {
+        JudgedSound {
+            sound_id: id.to_string(),
+            trend_rank: None,
+            title: id.to_string(),
+            author: "creator".to_string(),
+            platform: "tiktok".to_string(),
+            downloaded_video_count: Some(1),
+            extracted_audio_count: Some(1),
+            representative_view_count: None,
+            representative_like_count: None,
+            representative_comment_count: None,
+            representative_share_count: None,
+            score,
+            reasons: Vec::new(),
+            risks: Vec::new(),
+            recommended_action: recommended_action.to_string(),
+        }
+    }
+
+    #[test]
+    fn filter_judged_sounds_applies_score_action_and_top_limit() {
+        let sounds = vec![
+            judged_sound("sound_a", 95, "shortlist_after_rights_review"),
+            judged_sound("sound_b", 82, "use_first"),
+            judged_sound("sound_c", 65, "shortlist"),
+            judged_sound("sound_d", 40, "needs_review"),
+        ];
+
+        let filtered = filter_judged_sounds(
+            sounds,
+            Some(50),
+            &["USE_FIRST".to_string(), "shortlist".to_string()],
+            Some(1),
+        );
+
+        assert_eq!(filtered.len(), 1);
+        assert_eq!(filtered[0].sound_id, "sound_b");
     }
 }
