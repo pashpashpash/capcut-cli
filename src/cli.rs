@@ -10,7 +10,8 @@ use crate::{
     models::{
         AppReport, AuthReport, CandidatePostCoverageCount, DiscoverSource, DiscoveryReport,
         DownloadedVideoCoverageCount, EngagementMetricCoverageCount, ExtractedAudioCoverageCount,
-        JudgedSound, LibraryReport, MediaReport, MissingEngagementMetricFieldCount, PipelineStep,
+        JudgedSound, LibraryReport, LocalArtifactPathCoverageCount, MediaReport,
+        MissingEngagementMetricFieldCount, MissingLocalArtifactPathFieldCount, PipelineStep,
         PipelineStepKind, PlatformCount, ReasonCount, ReasonCountCoverageCount,
         RecommendedActionCount, RepresentativeCommentCountBandCount,
         RepresentativeCommentRateBandCount, RepresentativeEngagementCountBandCount,
@@ -631,6 +632,7 @@ fn summarize_judged_sounds(sounds: &[JudgedSound]) -> SoundJudgementSummary {
     let mut extracted_audio_coverage_counts = BTreeMap::new();
     let mut usable_asset_pair_coverage_counts = BTreeMap::new();
     let mut candidate_post_coverage_counts = BTreeMap::new();
+    let mut local_artifact_path_coverage_counts = BTreeMap::new();
     let mut engagement_metric_coverage_counts = BTreeMap::new();
     let mut representative_view_count_band_counts = BTreeMap::new();
     let mut representative_engagement_count_band_counts = BTreeMap::new();
@@ -641,6 +643,7 @@ fn summarize_judged_sounds(sounds: &[JudgedSound]) -> SoundJudgementSummary {
     let mut representative_engagement_rate_band_counts = BTreeMap::new();
     let mut representative_comment_rate_band_counts = BTreeMap::new();
     let mut representative_share_rate_band_counts = BTreeMap::new();
+    let mut missing_local_artifact_path_field_counts = BTreeMap::new();
     let mut missing_engagement_metric_field_counts = BTreeMap::new();
     let mut reason_counts = BTreeMap::new();
     let mut risk_counts = BTreeMap::new();
@@ -670,6 +673,9 @@ fn summarize_judged_sounds(sounds: &[JudgedSound]) -> SoundJudgementSummary {
             .or_insert(0) += 1;
         *candidate_post_coverage_counts
             .entry(sound.candidate_post_count)
+            .or_insert(0) += 1;
+        *local_artifact_path_coverage_counts
+            .entry(sound.local_artifact_path_count)
             .or_insert(0) += 1;
         *engagement_metric_coverage_counts
             .entry(sound.representative_engagement_metric_count)
@@ -719,6 +725,11 @@ fn summarize_judged_sounds(sounds: &[JudgedSound]) -> SoundJudgementSummary {
                 sound.representative_share_rate_per_1000_views,
             ))
             .or_insert(0) += 1;
+        for field in &sound.missing_local_artifact_path_fields {
+            *missing_local_artifact_path_field_counts
+                .entry(field.clone())
+                .or_insert(0) += 1;
+        }
         for field in &sound.missing_representative_engagement_metric_fields {
             *missing_engagement_metric_field_counts
                 .entry(field.clone())
@@ -793,6 +804,15 @@ fn summarize_judged_sounds(sounds: &[JudgedSound]) -> SoundJudgementSummary {
                 count,
             })
             .collect(),
+        local_artifact_path_coverage_counts: local_artifact_path_coverage_counts
+            .into_iter()
+            .map(
+                |(local_artifact_path_count, count)| LocalArtifactPathCoverageCount {
+                    local_artifact_path_count,
+                    count,
+                },
+            )
+            .collect(),
         engagement_metric_coverage_counts: engagement_metric_coverage_counts
             .into_iter()
             .map(
@@ -864,6 +884,10 @@ fn summarize_judged_sounds(sounds: &[JudgedSound]) -> SoundJudgementSummary {
                 band: band.to_string(),
                 count,
             })
+            .collect(),
+        missing_local_artifact_path_field_counts: missing_local_artifact_path_field_counts
+            .into_iter()
+            .map(|(field, count)| MissingLocalArtifactPathFieldCount { field, count })
             .collect(),
         missing_engagement_metric_field_counts: missing_engagement_metric_field_counts
             .into_iter()
@@ -1998,6 +2022,8 @@ mod tests {
             "representative_comment_count".to_string(),
             "representative_share_count".to_string(),
         ];
+        metrics_risk.local_artifact_path_count = 6;
+        metrics_risk.missing_local_artifact_path_fields = vec!["local_download_path".to_string()];
         metrics_risk
             .reasons
             .push("Top 10 trend rank is recorded".to_string());
@@ -2031,16 +2057,38 @@ mod tests {
         weak_signal.representative_comment_rate_per_1000_views = Some(1);
         weak_signal.representative_share_rate_per_1000_views = Some(4);
         weak_signal.missing_representative_engagement_metric_fields = missing_fields.clone();
+        weak_signal.local_artifact_path_count = 4;
+        weak_signal.missing_local_artifact_path_fields = vec![
+            "local_posts_path".to_string(),
+            "local_selection_path".to_string(),
+            "local_download_path".to_string(),
+        ];
         let mut needs_review = judged_sound("sound_d", 40, "needs_review");
         needs_review.downloaded_video_count = None;
         needs_review.extracted_audio_count = None;
         needs_review.usable_asset_pair_count = None;
         needs_review.missing_representative_engagement_metric_fields = missing_fields.clone();
+        needs_review.local_artifact_path_count = 2;
+        needs_review.missing_local_artifact_path_fields = vec![
+            "local_video_path".to_string(),
+            "local_trend_path".to_string(),
+            "local_posts_path".to_string(),
+            "local_selection_path".to_string(),
+            "local_download_path".to_string(),
+        ];
         let mut skip_for_now = judged_sound("sound_e", 20, "skip_for_now");
         skip_for_now.downloaded_video_count = None;
         skip_for_now.extracted_audio_count = None;
         skip_for_now.usable_asset_pair_count = None;
         skip_for_now.missing_representative_engagement_metric_fields = missing_fields;
+        skip_for_now.local_artifact_path_count = 2;
+        skip_for_now.missing_local_artifact_path_fields = vec![
+            "local_video_path".to_string(),
+            "local_trend_path".to_string(),
+            "local_posts_path".to_string(),
+            "local_selection_path".to_string(),
+            "local_download_path".to_string(),
+        ];
 
         let sounds = vec![
             rights_risk,
@@ -2199,6 +2247,30 @@ mod tests {
                 .candidate_post_coverage_counts
                 .iter()
                 .any(|count| { count.candidate_post_count.is_none() && count.count == 3 })
+        );
+        assert!(
+            summary
+                .local_artifact_path_coverage_counts
+                .iter()
+                .any(|count| { count.local_artifact_path_count == 7 && count.count == 1 })
+        );
+        assert!(
+            summary
+                .local_artifact_path_coverage_counts
+                .iter()
+                .any(|count| { count.local_artifact_path_count == 6 && count.count == 1 })
+        );
+        assert!(
+            summary
+                .local_artifact_path_coverage_counts
+                .iter()
+                .any(|count| { count.local_artifact_path_count == 4 && count.count == 1 })
+        );
+        assert!(
+            summary
+                .local_artifact_path_coverage_counts
+                .iter()
+                .any(|count| { count.local_artifact_path_count == 2 && count.count == 2 })
         );
         assert!(
             summary
@@ -2433,6 +2505,18 @@ mod tests {
                 .representative_share_rate_band_counts
                 .iter()
                 .any(|count| { count.band == "missing" && count.count == 2 })
+        );
+        assert!(
+            summary
+                .missing_local_artifact_path_field_counts
+                .iter()
+                .any(|count| { count.field == "local_download_path" && count.count == 4 })
+        );
+        assert!(
+            summary
+                .missing_local_artifact_path_field_counts
+                .iter()
+                .any(|count| { count.field == "local_posts_path" && count.count == 3 })
         );
         assert!(
             summary

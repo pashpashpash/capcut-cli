@@ -196,6 +196,7 @@ pub struct SoundJudgementSummary {
     pub extracted_audio_coverage_counts: Vec<ExtractedAudioCoverageCount>,
     pub usable_asset_pair_coverage_counts: Vec<UsableAssetPairCoverageCount>,
     pub candidate_post_coverage_counts: Vec<CandidatePostCoverageCount>,
+    pub local_artifact_path_coverage_counts: Vec<LocalArtifactPathCoverageCount>,
     pub engagement_metric_coverage_counts: Vec<EngagementMetricCoverageCount>,
     pub representative_view_count_band_counts: Vec<RepresentativeViewCountBandCount>,
     pub representative_engagement_count_band_counts: Vec<RepresentativeEngagementCountBandCount>,
@@ -206,6 +207,7 @@ pub struct SoundJudgementSummary {
     pub representative_engagement_rate_band_counts: Vec<RepresentativeEngagementRateBandCount>,
     pub representative_comment_rate_band_counts: Vec<RepresentativeCommentRateBandCount>,
     pub representative_share_rate_band_counts: Vec<RepresentativeShareRateBandCount>,
+    pub missing_local_artifact_path_field_counts: Vec<MissingLocalArtifactPathFieldCount>,
     pub missing_engagement_metric_field_counts: Vec<MissingEngagementMetricFieldCount>,
     pub reason_counts: Vec<ReasonCount>,
     pub risk_counts: Vec<RiskCount>,
@@ -272,6 +274,12 @@ pub struct EngagementMetricCoverageCount {
 }
 
 #[derive(Debug, Serialize)]
+pub struct LocalArtifactPathCoverageCount {
+    pub local_artifact_path_count: usize,
+    pub count: usize,
+}
+
+#[derive(Debug, Serialize)]
 pub struct RepresentativeViewCountBandCount {
     pub band: String,
     pub count: usize,
@@ -327,6 +335,12 @@ pub struct RepresentativeShareRateBandCount {
 
 #[derive(Debug, Serialize)]
 pub struct MissingEngagementMetricFieldCount {
+    pub field: String,
+    pub count: usize,
+}
+
+#[derive(Debug, Serialize)]
+pub struct MissingLocalArtifactPathFieldCount {
     pub field: String,
     pub count: usize,
 }
