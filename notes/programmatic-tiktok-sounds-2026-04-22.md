@@ -82,6 +82,7 @@ Implemented refinements:
 - `--min-downloaded-videos` and `--min-extracted-audios` let the shortlist require enough usable local material for editing, which keeps "viral but unusable" sounds out of production-oriented passes
 - returned sounds include `candidate_post_count`, and `--min-candidate-posts` lets shortlists require enough resolver sample depth before trusting a representative post
 - judgement summaries now include `candidate_post_coverage_counts`, so agents can see resolver sample-depth distribution before trusting a filtered viral shortlist
+- judgement summaries now include `downloaded_video_coverage_counts` and `extracted_audio_coverage_counts`, so agents can see local asset readiness distribution before opening individual rows
 - `--min-representative-views`, `--min-representative-likes`, `--min-representative-comments`, and `--min-representative-shares` let the shortlist require direct engagement, discussion, and spread evidence instead of trusting chart rank alone
 - returned sounds include `representative_engagement_count`, and `--min-representative-engagements` lets shortlists require absolute likes, comments, and shares volume before trusting dense but tiny samples
 - judgement summaries now include `representative_engagement_count_band_counts`, so agents can compare absolute engagement-volume distribution before opening individual rows

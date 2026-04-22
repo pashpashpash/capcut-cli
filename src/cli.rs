@@ -9,15 +9,15 @@ use crate::{
     config::{self, APIFY_CONFIG_ENV, TIKTOK_SOUND_RESOLVER_ACTOR_ID_ENV},
     models::{
         AppReport, AuthReport, CandidatePostCoverageCount, DiscoverSource, DiscoveryReport,
-        EngagementMetricCoverageCount, JudgedSound, LibraryReport, MediaReport,
-        MissingEngagementMetricFieldCount, PipelineStep, PipelineStepKind, PlatformCount,
-        ReasonCount, RecommendedActionCount, RepresentativeCommentCountBandCount,
-        RepresentativeCommentRateBandCount, RepresentativeEngagementCountBandCount,
-        RepresentativeEngagementRateBandCount, RepresentativeLikeCountBandCount,
-        RepresentativeLikeRateBandCount, RepresentativeShareCountBandCount,
-        RepresentativeShareRateBandCount, RepresentativeViewCountBandCount, RiskCount,
-        ScoreBandCount, SoundImportReport, SoundJudgementFilters, SoundJudgementReport,
-        SoundJudgementSummary, UpdateReport,
+        DownloadedVideoCoverageCount, EngagementMetricCoverageCount, ExtractedAudioCoverageCount,
+        JudgedSound, LibraryReport, MediaReport, MissingEngagementMetricFieldCount, PipelineStep,
+        PipelineStepKind, PlatformCount, ReasonCount, RecommendedActionCount,
+        RepresentativeCommentCountBandCount, RepresentativeCommentRateBandCount,
+        RepresentativeEngagementCountBandCount, RepresentativeEngagementRateBandCount,
+        RepresentativeLikeCountBandCount, RepresentativeLikeRateBandCount,
+        RepresentativeShareCountBandCount, RepresentativeShareRateBandCount,
+        RepresentativeViewCountBandCount, RiskCount, ScoreBandCount, SoundImportReport,
+        SoundJudgementFilters, SoundJudgementReport, SoundJudgementSummary, UpdateReport,
     },
     tiktok::{
         self, DEFAULT_IMPORT_OUTPUT_DIR, ImportTrendingSoundsOptions, LIBRARY_MANIFEST_PATH,
@@ -606,6 +606,8 @@ fn summarize_judged_sounds(sounds: &[JudgedSound]) -> SoundJudgementSummary {
     let mut recommended_action_counts = BTreeMap::new();
     let mut platform_counts = BTreeMap::new();
     let mut score_band_counts = BTreeMap::new();
+    let mut downloaded_video_coverage_counts = BTreeMap::new();
+    let mut extracted_audio_coverage_counts = BTreeMap::new();
     let mut candidate_post_coverage_counts = BTreeMap::new();
     let mut engagement_metric_coverage_counts = BTreeMap::new();
     let mut representative_view_count_band_counts = BTreeMap::new();
@@ -628,6 +630,12 @@ fn summarize_judged_sounds(sounds: &[JudgedSound]) -> SoundJudgementSummary {
         *platform_counts.entry(sound.platform.clone()).or_insert(0) += 1;
         *score_band_counts
             .entry(score_band(sound.score).to_string())
+            .or_insert(0) += 1;
+        *downloaded_video_coverage_counts
+            .entry(sound.downloaded_video_count)
+            .or_insert(0) += 1;
+        *extracted_audio_coverage_counts
+            .entry(sound.extracted_audio_count)
             .or_insert(0) += 1;
         *candidate_post_coverage_counts
             .entry(sound.candidate_post_count)
@@ -708,6 +716,24 @@ fn summarize_judged_sounds(sounds: &[JudgedSound]) -> SoundJudgementSummary {
         score_band_counts: score_band_counts
             .into_iter()
             .map(|(band, count)| ScoreBandCount { band, count })
+            .collect(),
+        downloaded_video_coverage_counts: downloaded_video_coverage_counts
+            .into_iter()
+            .map(
+                |(downloaded_video_count, count)| DownloadedVideoCoverageCount {
+                    downloaded_video_count,
+                    count,
+                },
+            )
+            .collect(),
+        extracted_audio_coverage_counts: extracted_audio_coverage_counts
+            .into_iter()
+            .map(
+                |(extracted_audio_count, count)| ExtractedAudioCoverageCount {
+                    extracted_audio_count,
+                    count,
+                },
+            )
             .collect(),
         candidate_post_coverage_counts: candidate_post_coverage_counts
             .into_iter()
@@ -1718,6 +1744,8 @@ mod tests {
     fn summarize_judged_sounds_counts_actions_score_bands_reasons_and_risks() {
         let mut rights_risk = judged_sound("sound_a", 95, "shortlist_after_rights_review");
         rights_risk.candidate_post_count = Some(20);
+        rights_risk.downloaded_video_count = Some(3);
+        rights_risk.extracted_audio_count = Some(2);
         rights_risk.representative_view_count = Some(37_548_076);
         rights_risk.representative_like_count = Some(7_427_697);
         rights_risk.representative_engagement_count = Some(8_854_703);
@@ -1736,6 +1764,8 @@ mod tests {
             .push("Rights still need manual verification before production use".to_string());
         let mut metrics_risk = judged_sound("sound_b", 82, "shortlist_after_rights_review");
         metrics_risk.candidate_post_count = Some(5);
+        metrics_risk.downloaded_video_count = Some(1);
+        metrics_risk.extracted_audio_count = Some(1);
         metrics_risk.representative_view_count = Some(2_500_000);
         metrics_risk.representative_like_count = Some(175_000);
         metrics_risk.representative_engagement_count = Some(250_000);
@@ -1770,6 +1800,8 @@ mod tests {
             "representative_share_count".to_string(),
         ];
         let mut weak_signal = judged_sound("sound_c", 65, "shortlist");
+        weak_signal.downloaded_video_count = Some(0);
+        weak_signal.extracted_audio_count = Some(0);
         weak_signal.representative_view_count = Some(75_000);
         weak_signal.representative_like_count = Some(1_500);
         weak_signal.representative_engagement_count = Some(75_000);
@@ -1781,8 +1813,12 @@ mod tests {
         weak_signal.representative_share_rate_per_1000_views = Some(4);
         weak_signal.missing_representative_engagement_metric_fields = missing_fields.clone();
         let mut needs_review = judged_sound("sound_d", 40, "needs_review");
+        needs_review.downloaded_video_count = None;
+        needs_review.extracted_audio_count = None;
         needs_review.missing_representative_engagement_metric_fields = missing_fields.clone();
         let mut skip_for_now = judged_sound("sound_e", 20, "skip_for_now");
+        skip_for_now.downloaded_video_count = None;
+        skip_for_now.extracted_audio_count = None;
         skip_for_now.missing_representative_engagement_metric_fields = missing_fields;
 
         let sounds = vec![
@@ -1816,6 +1852,54 @@ mod tests {
                 .score_band_counts
                 .iter()
                 .any(|count| { count.band == "0_29" && count.count == 1 })
+        );
+        assert!(
+            summary
+                .downloaded_video_coverage_counts
+                .iter()
+                .any(|count| { count.downloaded_video_count == Some(3) && count.count == 1 })
+        );
+        assert!(
+            summary
+                .downloaded_video_coverage_counts
+                .iter()
+                .any(|count| { count.downloaded_video_count == Some(1) && count.count == 1 })
+        );
+        assert!(
+            summary
+                .downloaded_video_coverage_counts
+                .iter()
+                .any(|count| { count.downloaded_video_count == Some(0) && count.count == 1 })
+        );
+        assert!(
+            summary
+                .downloaded_video_coverage_counts
+                .iter()
+                .any(|count| { count.downloaded_video_count.is_none() && count.count == 2 })
+        );
+        assert!(
+            summary
+                .extracted_audio_coverage_counts
+                .iter()
+                .any(|count| { count.extracted_audio_count == Some(2) && count.count == 1 })
+        );
+        assert!(
+            summary
+                .extracted_audio_coverage_counts
+                .iter()
+                .any(|count| { count.extracted_audio_count == Some(1) && count.count == 1 })
+        );
+        assert!(
+            summary
+                .extracted_audio_coverage_counts
+                .iter()
+                .any(|count| { count.extracted_audio_count == Some(0) && count.count == 1 })
+        );
+        assert!(
+            summary
+                .extracted_audio_coverage_counts
+                .iter()
+                .any(|count| { count.extracted_audio_count.is_none() && count.count == 2 })
         );
         assert!(
             summary
