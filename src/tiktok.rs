@@ -252,6 +252,14 @@ struct DownloadedAssetMetadata {
     local_audio_path: Option<String>,
 }
 
+#[derive(Debug, Clone, Copy, Default)]
+struct RepresentativeEngagementMetrics {
+    view_count: Option<u64>,
+    like_count: Option<u64>,
+    comment_count: Option<u64>,
+    share_count: Option<u64>,
+}
+
 #[derive(Debug, Deserialize, Serialize, Default)]
 struct Manifest {
     #[serde(default)]
@@ -511,6 +519,8 @@ fn sort_and_rank_judged_sounds(sounds: &mut [JudgedSound]) {
 
 fn judge_manifest_entry(manifest_path: &Path, entry: &ManifestEntry) -> Result<JudgedSound> {
     let metadata = read_optional_metadata(manifest_path, &entry.local_metadata_path)?;
+    let representative_post_engagement =
+        representative_engagement_from_posts_artifact(manifest_path, entry)?;
     let downloaded_video_count = entry
         .downloaded_video_count
         .or_else(|| metadata_usize(&metadata, &[&["downloaded_video_count"]]))
@@ -547,6 +557,7 @@ fn judge_manifest_entry(manifest_path: &Path, entry: &ManifestEntry) -> Result<J
                 &["selection", "selected_view_count"],
             ],
         )
+        .or(representative_post_engagement.view_count)
     });
     let representative_like_count = entry.representative_like_count.or_else(|| {
         metadata_u64(
@@ -556,6 +567,7 @@ fn judge_manifest_entry(manifest_path: &Path, entry: &ManifestEntry) -> Result<J
                 &["selection", "selected_like_count"],
             ],
         )
+        .or(representative_post_engagement.like_count)
     });
     let representative_comment_count = entry.representative_comment_count.or_else(|| {
         metadata_u64(
@@ -565,6 +577,7 @@ fn judge_manifest_entry(manifest_path: &Path, entry: &ManifestEntry) -> Result<J
                 &["selection", "selected_comment_count"],
             ],
         )
+        .or(representative_post_engagement.comment_count)
     });
     let representative_share_count = entry.representative_share_count.or_else(|| {
         metadata_u64(
@@ -574,6 +587,7 @@ fn judge_manifest_entry(manifest_path: &Path, entry: &ManifestEntry) -> Result<J
                 &["selection", "selected_share_count"],
             ],
         )
+        .or(representative_post_engagement.share_count)
     });
     let representative_engagement_metrics = [
         (
@@ -1467,6 +1481,79 @@ fn read_optional_metadata(manifest_path: &Path, metadata_path: &str) -> Result<O
         .map(Some)
 }
 
+fn representative_engagement_from_posts_artifact(
+    manifest_path: &Path,
+    entry: &ManifestEntry,
+) -> Result<RepresentativeEngagementMetrics> {
+    let Some(posts_path) = entry
+        .local_posts_path
+        .as_deref()
+        .filter(|path| !path.trim().is_empty())
+    else {
+        return Ok(RepresentativeEngagementMetrics::default());
+    };
+    let Some(video_id) = representative_video_id(entry) else {
+        return Ok(RepresentativeEngagementMetrics::default());
+    };
+
+    let path = resolve_library_path(manifest_path, posts_path);
+    if !path.exists() {
+        return Ok(RepresentativeEngagementMetrics::default());
+    }
+
+    let bytes = fs::read(&path).with_context(|| format!("failed to read {}", path.display()))?;
+    let value: Value = serde_json::from_slice(&bytes)
+        .with_context(|| format!("failed to parse {}", path.display()))?;
+    let Some(raw_dataset) = resolver_raw_dataset(&value) else {
+        return Ok(RepresentativeEngagementMetrics::default());
+    };
+
+    for (index, row) in raw_dataset.iter().enumerate() {
+        if let Some(candidate) = normalize_resolver_post_item(row, index) {
+            let is_representative = candidate.video_id == video_id
+                || candidate.aweme_id.as_deref() == Some(video_id.as_str());
+            if is_representative {
+                return Ok(RepresentativeEngagementMetrics {
+                    view_count: candidate.play_count,
+                    like_count: candidate.digg_count,
+                    comment_count: candidate.comment_count,
+                    share_count: candidate.share_count,
+                });
+            }
+        }
+    }
+
+    Ok(RepresentativeEngagementMetrics::default())
+}
+
+fn representative_video_id(entry: &ManifestEntry) -> Option<String> {
+    entry
+        .representative_video_id
+        .clone()
+        .or_else(|| {
+            entry
+                .representative_video_url
+                .as_deref()
+                .and_then(tiktok_video_id)
+                .map(ToString::to_string)
+        })
+        .or_else(|| {
+            entry
+                .source_video_url
+                .as_deref()
+                .and_then(tiktok_video_id)
+                .map(ToString::to_string)
+        })
+}
+
+fn resolver_raw_dataset(value: &Value) -> Option<&[Value]> {
+    value
+        .get("raw_dataset")
+        .and_then(Value::as_array)
+        .or_else(|| value.as_array())
+        .map(Vec::as_slice)
+}
+
 fn resolve_library_path(manifest_path: &Path, value: &str) -> PathBuf {
     let path = PathBuf::from(value);
     if path.is_absolute() || path.exists() {
@@ -1872,6 +1959,87 @@ mod tests {
             )
         );
         assert_eq!(judged.risk_count, judged.risks.len());
+    }
+
+    #[test]
+    fn judging_recovers_representative_engagement_from_posts_artifact() {
+        let temp_dir = std::env::temp_dir().join(format!(
+            "capcut-cli-posts-artifact-test-{}",
+            std::process::id()
+        ));
+        let _ = std::fs::remove_dir_all(&temp_dir);
+        std::fs::create_dir_all(&temp_dir).expect("create temp dir");
+        let posts_path = temp_dir.join("posts.json");
+        std::fs::write(
+            &posts_path,
+            serde_json::to_vec_pretty(&json!({
+                "raw_dataset": [
+                    {
+                        "aweme_id": "7564571947263069454",
+                        "author": {
+                            "unique_id": "creator"
+                        },
+                        "statistics": {
+                            "play_count": 37_548_076,
+                            "digg_count": 7_427_697,
+                            "comment_count": 51_294,
+                            "share_count": 1_375_712
+                        }
+                    }
+                ]
+            }))
+            .expect("serialize posts"),
+        )
+        .expect("write posts");
+
+        let entry = ManifestEntry {
+            id: "tiktok_sound_123".to_string(),
+            title: "Example Sound".to_string(),
+            author: "Example Creator".to_string(),
+            platform: "tiktok".to_string(),
+            trend_rank: Some(1),
+            source_url: "https://www.tiktok.com/music/example-123".to_string(),
+            source_video_url: Some(
+                "https://www.tiktok.com/@creator/video/7564571947263069454".to_string(),
+            ),
+            duration_seconds: Some(12),
+            local_audio_path: "library/sounds/imported/example/audio.mp3".to_string(),
+            local_metadata_path: "missing-metadata.json".to_string(),
+            rights_note: "For research only. Verify rights before production use.".to_string(),
+            provenance: "Imported from Apify trending sounds".to_string(),
+            song_id: Some("123".to_string()),
+            clip_id: Some("456".to_string()),
+            country_code: Some("US".to_string()),
+            local_video_path: Some("library/sounds/imported/example/video.mp4".to_string()),
+            local_trend_path: None,
+            local_posts_path: Some(posts_path.display().to_string()),
+            local_selection_path: None,
+            local_download_path: None,
+            local_videos_dir: Some("library/sounds/imported/example/videos".to_string()),
+            local_audios_dir: Some("library/sounds/imported/example/audios".to_string()),
+            downloaded_video_count: Some(1),
+            extracted_audio_count: Some(1),
+            representative_video_url: None,
+            representative_video_id: Some("7564571947263069454".to_string()),
+            representative_comment_count: None,
+            representative_share_count: None,
+            representative_like_count: None,
+            representative_view_count: None,
+            resolver_actor_id: Some("resolver".to_string()),
+            download_method: Some(DIRECT_DOWNLOAD_METHOD.to_string()),
+        };
+
+        let judged = judge_manifest_entry(Path::new("library/sounds/manifest.json"), &entry)
+            .expect("judged sound");
+
+        assert_eq!(judged.representative_view_count, Some(37_548_076));
+        assert_eq!(judged.representative_like_count, Some(7_427_697));
+        assert_eq!(judged.representative_comment_count, Some(51_294));
+        assert_eq!(judged.representative_share_count, Some(1_375_712));
+        assert_eq!(judged.representative_engagement_metric_count, 4);
+        assert_eq!(judged.score, 100);
+
+        let _ = std::fs::remove_dir_all(&temp_dir);
     }
 
     #[test]

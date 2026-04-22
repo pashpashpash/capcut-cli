@@ -85,6 +85,7 @@ Implemented refinements:
 - `--min-representative-engagement-metrics` filters returned sounds by how many representative engagement fields are present, letting agents require broad metric coverage before trusting a viral shortlist
 - repeated `--require-engagement-metric-field` filters keep only sounds with specific representative engagement metric fields such as `representative_view_count` and `representative_like_count`
 - the resolver normalizer now reads Novi-style `statistics.*` engagement metrics, so future imports preserve representative views, likes, comments, and shares for judgement
+- the judgement pass can recover representative engagement metrics from the saved `local_posts_path` resolver artifact, so older imports with sparse manifest metadata can still be scored from retained raw data
 - returned sounds include `reason_count` so agents can inspect positive-signal density directly instead of counting the `reasons` array
 - returned sounds include `risk_count` so agents can inspect risk density directly instead of counting the `risks` array after using risk filters
 - repeated `--exclude-risk` filters remove sounds whose risk text contains a matching substring, allowing production-oriented passes to drop known blockers such as unresolved rights review
