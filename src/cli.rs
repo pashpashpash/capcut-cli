@@ -8,9 +8,9 @@ use crate::{
     apify,
     config::{self, APIFY_CONFIG_ENV, TIKTOK_SOUND_RESOLVER_ACTOR_ID_ENV},
     models::{
-        AppReport, AuthReport, DiscoverSource, DiscoveryReport, JudgedSound, LibraryReport,
-        MediaReport, PipelineStep, PipelineStepKind, PlatformCount, ReasonCount,
-        RecommendedActionCount, RiskCount, ScoreBandCount, SoundImportReport,
+        AppReport, AuthReport, DiscoverSource, DiscoveryReport, EngagementMetricCoverageCount,
+        JudgedSound, LibraryReport, MediaReport, PipelineStep, PipelineStepKind, PlatformCount,
+        ReasonCount, RecommendedActionCount, RiskCount, ScoreBandCount, SoundImportReport,
         SoundJudgementFilters, SoundJudgementReport, SoundJudgementSummary, UpdateReport,
     },
     tiktok::{
@@ -527,6 +527,7 @@ fn summarize_judged_sounds(sounds: &[JudgedSound]) -> SoundJudgementSummary {
     let mut recommended_action_counts = BTreeMap::new();
     let mut platform_counts = BTreeMap::new();
     let mut score_band_counts = BTreeMap::new();
+    let mut engagement_metric_coverage_counts = BTreeMap::new();
     let mut reason_counts = BTreeMap::new();
     let mut risk_counts = BTreeMap::new();
 
@@ -537,6 +538,9 @@ fn summarize_judged_sounds(sounds: &[JudgedSound]) -> SoundJudgementSummary {
         *platform_counts.entry(sound.platform.clone()).or_insert(0) += 1;
         *score_band_counts
             .entry(score_band(sound.score).to_string())
+            .or_insert(0) += 1;
+        *engagement_metric_coverage_counts
+            .entry(sound.representative_engagement_metric_count)
             .or_insert(0) += 1;
         for reason in &sound.reasons {
             *reason_counts.entry(reason.clone()).or_insert(0) += 1;
@@ -561,6 +565,15 @@ fn summarize_judged_sounds(sounds: &[JudgedSound]) -> SoundJudgementSummary {
         score_band_counts: score_band_counts
             .into_iter()
             .map(|(band, count)| ScoreBandCount { band, count })
+            .collect(),
+        engagement_metric_coverage_counts: engagement_metric_coverage_counts
+            .into_iter()
+            .map(
+                |(representative_engagement_metric_count, count)| EngagementMetricCoverageCount {
+                    representative_engagement_metric_count,
+                    count,
+                },
+            )
             .collect(),
         reason_counts: reason_counts
             .into_iter()
@@ -1081,6 +1094,7 @@ mod tests {
     #[test]
     fn summarize_judged_sounds_counts_actions_score_bands_reasons_and_risks() {
         let mut rights_risk = judged_sound("sound_a", 95, "shortlist_after_rights_review");
+        rights_risk.representative_engagement_metric_count = 4;
         rights_risk
             .reasons
             .push("Top 10 trend rank is recorded".to_string());
@@ -1088,6 +1102,7 @@ mod tests {
             .risks
             .push("Rights still need manual verification before production use".to_string());
         let mut metrics_risk = judged_sound("sound_b", 82, "shortlist_after_rights_review");
+        metrics_risk.representative_engagement_metric_count = 2;
         metrics_risk
             .reasons
             .push("Top 10 trend rank is recorded".to_string());
@@ -1132,6 +1147,30 @@ mod tests {
                 .score_band_counts
                 .iter()
                 .any(|count| { count.band == "0_29" && count.count == 1 })
+        );
+        assert!(
+            summary
+                .engagement_metric_coverage_counts
+                .iter()
+                .any(|count| {
+                    count.representative_engagement_metric_count == 0 && count.count == 3
+                })
+        );
+        assert!(
+            summary
+                .engagement_metric_coverage_counts
+                .iter()
+                .any(|count| {
+                    count.representative_engagement_metric_count == 2 && count.count == 1
+                })
+        );
+        assert!(
+            summary
+                .engagement_metric_coverage_counts
+                .iter()
+                .any(|count| {
+                    count.representative_engagement_metric_count == 4 && count.count == 1
+                })
         );
         assert!(
             summary.reason_counts.iter().any(|count| {
