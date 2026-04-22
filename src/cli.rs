@@ -35,6 +35,15 @@ const REPRESENTATIVE_ENGAGEMENT_METRIC_FIELDS: [&str; 4] = [
     "representative_comment_count",
     "representative_share_count",
 ];
+const LOCAL_ARTIFACT_PATH_FIELDS: [&str; 7] = [
+    "local_audio_path",
+    "local_video_path",
+    "local_metadata_path",
+    "local_trend_path",
+    "local_posts_path",
+    "local_selection_path",
+    "local_download_path",
+];
 
 #[derive(Debug, Parser)]
 #[command(
@@ -443,6 +452,12 @@ struct JudgeSoundArgs {
     min_candidate_posts: Option<usize>,
 
     #[arg(long)]
+    min_local_artifact_paths: Option<usize>,
+
+    #[arg(long = "require-local-artifact-path-field")]
+    required_local_artifact_path_fields: Vec<String>,
+
+    #[arg(long)]
     min_representative_views: Option<u64>,
 
     #[arg(long)]
@@ -495,6 +510,30 @@ impl JudgeSoundArgs {
             .is_some_and(|count| count > 4)
         {
             bail!("--min-representative-engagement-metrics must be between 0 and 4")
+        }
+        if self
+            .min_local_artifact_paths
+            .is_some_and(|count| count > LOCAL_ARTIFACT_PATH_FIELDS.len())
+        {
+            bail!("--min-local-artifact-paths must be between 0 and 7")
+        }
+        if self
+            .required_local_artifact_path_fields
+            .iter()
+            .any(|field| field.trim().is_empty())
+        {
+            bail!("--require-local-artifact-path-field values must not be empty")
+        }
+        if let Some(field) = self
+            .required_local_artifact_path_fields
+            .iter()
+            .map(|field| field.trim())
+            .find(|field| !is_local_artifact_path_field(field))
+        {
+            bail!(
+                "--require-local-artifact-path-field `{field}` must be one of: {}",
+                LOCAL_ARTIFACT_PATH_FIELDS.join(", ")
+            )
         }
         if self
             .required_engagement_metric_fields
@@ -561,6 +600,8 @@ impl JudgeSoundArgs {
             min_extracted_audios: self.min_extracted_audios,
             min_usable_asset_pairs: self.min_usable_asset_pairs,
             min_candidate_posts: self.min_candidate_posts,
+            min_local_artifact_paths: self.min_local_artifact_paths,
+            required_local_artifact_path_fields: self.required_local_artifact_path_fields.clone(),
             min_representative_views: self.min_representative_views,
             min_representative_likes: self.min_representative_likes,
             min_representative_engagements: self.min_representative_engagements,
@@ -577,7 +618,7 @@ impl JudgeSoundArgs {
             min_representative_engagement_metrics: self.min_representative_engagement_metrics,
             required_engagement_metric_fields: self.required_engagement_metric_fields.clone(),
         };
-        let sounds = filter_judged_sounds(
+        let mut sounds = filter_judged_sounds(
             sounds,
             self.min_score,
             self.max_trend_rank,
@@ -603,8 +644,16 @@ impl JudgeSoundArgs {
             self.min_representative_share_rate_per_1000_views,
             self.min_representative_engagement_metrics,
             &self.required_engagement_metric_fields,
-            self.top,
+            None,
         );
+        filter_judged_sounds_by_local_artifacts(
+            &mut sounds,
+            self.min_local_artifact_paths,
+            &self.required_local_artifact_path_fields,
+        );
+        if let Some(top) = self.top {
+            sounds.truncate(top);
+        }
         let filtered_out_count = total_count - sounds.len();
         let filtered_summary = summarize_judged_sounds(&sounds);
 
@@ -1217,6 +1266,30 @@ fn filter_judged_sounds(
     sounds
 }
 
+fn filter_judged_sounds_by_local_artifacts(
+    sounds: &mut Vec<JudgedSound>,
+    min_local_artifact_paths: Option<usize>,
+    required_local_artifact_path_fields: &[String],
+) {
+    if let Some(min_local_artifact_paths) = min_local_artifact_paths {
+        sounds.retain(|sound| sound.local_artifact_path_count >= min_local_artifact_paths);
+    }
+
+    if !required_local_artifact_path_fields.is_empty() {
+        sounds.retain(|sound| {
+            required_local_artifact_path_fields
+                .iter()
+                .map(|field| field.trim())
+                .all(|required| {
+                    sound
+                        .local_artifact_path_fields
+                        .iter()
+                        .any(|field| field == required)
+                })
+        });
+    }
+}
+
 fn matches_all_required_reasons(reasons: &[String], required_reasons: &[String]) -> bool {
     required_reasons.iter().all(|required| {
         let required = required.trim().to_ascii_lowercase();
@@ -1235,6 +1308,10 @@ fn matches_any_excluded_risk(risk: &str, excluded_risks: &[String]) -> bool {
 
 fn is_representative_engagement_metric_field(field: &str) -> bool {
     REPRESENTATIVE_ENGAGEMENT_METRIC_FIELDS.contains(&field)
+}
+
+fn is_local_artifact_path_field(field: &str) -> bool {
+    LOCAL_ARTIFACT_PATH_FIELDS.contains(&field)
 }
 
 #[derive(Debug, Args)]
@@ -1674,6 +1751,58 @@ mod tests {
             None,
             &[],
             None,
+        );
+
+        assert_eq!(filtered.len(), 1);
+        assert_eq!(filtered[0].sound_id, "sound_a");
+    }
+
+    #[test]
+    fn filter_judged_sounds_applies_local_artifact_path_filters() {
+        let complete_artifacts = judged_sound("sound_a", 95, "shortlist_after_rights_review");
+        let mut review_ready = judged_sound("sound_b", 95, "shortlist_after_rights_review");
+        review_ready.local_artifact_path_count = 6;
+        review_ready.local_artifact_path_fields = vec![
+            "local_audio_path".to_string(),
+            "local_video_path".to_string(),
+            "local_metadata_path".to_string(),
+            "local_trend_path".to_string(),
+            "local_posts_path".to_string(),
+            "local_selection_path".to_string(),
+        ];
+        review_ready.missing_local_artifact_path_fields = vec!["local_download_path".to_string()];
+        let mut sparse_artifacts = judged_sound("sound_c", 95, "shortlist_after_rights_review");
+        sparse_artifacts.local_artifact_path_count = 4;
+        sparse_artifacts.local_artifact_path_fields = vec![
+            "local_audio_path".to_string(),
+            "local_metadata_path".to_string(),
+            "local_posts_path".to_string(),
+            "local_selection_path".to_string(),
+        ];
+
+        let mut filtered = vec![
+            complete_artifacts.clone(),
+            review_ready.clone(),
+            sparse_artifacts,
+        ];
+        filter_judged_sounds_by_local_artifacts(
+            &mut filtered,
+            Some(6),
+            &[
+                "local_posts_path".to_string(),
+                "local_selection_path".to_string(),
+            ],
+        );
+
+        assert_eq!(filtered.len(), 2);
+        assert_eq!(filtered[0].sound_id, "sound_a");
+        assert_eq!(filtered[1].sound_id, "sound_b");
+
+        let mut filtered = vec![complete_artifacts, review_ready];
+        filter_judged_sounds_by_local_artifacts(
+            &mut filtered,
+            Some(6),
+            &["local_download_path".to_string()],
         );
 
         assert_eq!(filtered.len(), 1);
