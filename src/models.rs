@@ -148,7 +148,26 @@ pub struct SoundJudgementReport {
     pub manifest_path: String,
     pub total_count: usize,
     pub judged_count: usize,
+    pub summary: SoundJudgementSummary,
     pub sounds: Vec<JudgedSound>,
+}
+
+#[derive(Debug, Serialize)]
+pub struct SoundJudgementSummary {
+    pub recommended_action_counts: Vec<RecommendedActionCount>,
+    pub score_band_counts: Vec<ScoreBandCount>,
+}
+
+#[derive(Debug, Serialize)]
+pub struct RecommendedActionCount {
+    pub recommended_action: String,
+    pub count: usize,
+}
+
+#[derive(Debug, Serialize)]
+pub struct ScoreBandCount {
+    pub band: String,
+    pub count: usize,
 }
 
 #[derive(Debug, Clone, Serialize)]

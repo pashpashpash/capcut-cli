@@ -1,3 +1,4 @@
+use std::collections::BTreeMap;
 use std::path::PathBuf;
 
 use anyhow::{Result, bail};
@@ -8,8 +9,8 @@ use crate::{
     config::{self, APIFY_CONFIG_ENV, TIKTOK_SOUND_RESOLVER_ACTOR_ID_ENV},
     models::{
         AppReport, AuthReport, DiscoverSource, DiscoveryReport, JudgedSound, LibraryReport,
-        MediaReport, PipelineStep, PipelineStepKind, SoundImportReport, SoundJudgementReport,
-        UpdateReport,
+        MediaReport, PipelineStep, PipelineStepKind, RecommendedActionCount, ScoreBandCount,
+        SoundImportReport, SoundJudgementReport, SoundJudgementSummary, UpdateReport,
     },
     tiktok::{
         self, DEFAULT_IMPORT_OUTPUT_DIR, ImportTrendingSoundsOptions, LIBRARY_MANIFEST_PATH,
@@ -410,6 +411,7 @@ impl JudgeSoundArgs {
 
         let sounds = tiktok::judge_sound_library(&self.manifest)?;
         let total_count = sounds.len();
+        let summary = summarize_judged_sounds(&sounds);
         let sounds =
             filter_judged_sounds(sounds, self.min_score, &self.recommended_actions, self.top);
 
@@ -417,8 +419,46 @@ impl JudgeSoundArgs {
             manifest_path: self.manifest.display().to_string(),
             total_count,
             judged_count: sounds.len(),
+            summary,
             sounds,
         }))
+    }
+}
+
+fn summarize_judged_sounds(sounds: &[JudgedSound]) -> SoundJudgementSummary {
+    let mut recommended_action_counts = BTreeMap::new();
+    let mut score_band_counts = BTreeMap::new();
+
+    for sound in sounds {
+        *recommended_action_counts
+            .entry(sound.recommended_action.clone())
+            .or_insert(0) += 1;
+        *score_band_counts
+            .entry(score_band(sound.score).to_string())
+            .or_insert(0) += 1;
+    }
+
+    SoundJudgementSummary {
+        recommended_action_counts: recommended_action_counts
+            .into_iter()
+            .map(|(recommended_action, count)| RecommendedActionCount {
+                recommended_action,
+                count,
+            })
+            .collect(),
+        score_band_counts: score_band_counts
+            .into_iter()
+            .map(|(band, count)| ScoreBandCount { band, count })
+            .collect(),
+    }
+}
+
+fn score_band(score: u32) -> &'static str {
+    match score {
+        75..=100 => "75_100",
+        50..=74 => "50_74",
+        30..=49 => "30_49",
+        _ => "0_29",
     }
 }
 
@@ -563,5 +603,35 @@ mod tests {
 
         assert_eq!(filtered.len(), 1);
         assert_eq!(filtered[0].sound_id, "sound_b");
+    }
+
+    #[test]
+    fn summarize_judged_sounds_counts_actions_and_score_bands() {
+        let sounds = vec![
+            judged_sound("sound_a", 95, "shortlist_after_rights_review"),
+            judged_sound("sound_b", 82, "shortlist_after_rights_review"),
+            judged_sound("sound_c", 65, "shortlist"),
+            judged_sound("sound_d", 40, "needs_review"),
+            judged_sound("sound_e", 20, "skip_for_now"),
+        ];
+
+        let summary = summarize_judged_sounds(&sounds);
+
+        assert_eq!(summary.recommended_action_counts.len(), 4);
+        assert!(summary.recommended_action_counts.iter().any(|count| {
+            count.recommended_action == "shortlist_after_rights_review" && count.count == 2
+        }));
+        assert!(
+            summary
+                .score_band_counts
+                .iter()
+                .any(|count| { count.band == "75_100" && count.count == 2 })
+        );
+        assert!(
+            summary
+                .score_band_counts
+                .iter()
+                .any(|count| { count.band == "0_29" && count.count == 1 })
+        );
     }
 }

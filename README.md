@@ -134,6 +134,8 @@ cargo run -- library sound judge --min-score 75 --recommended-action shortlist_a
 
 The report scores each sound using recorded trend rank, downloaded/extracted asset coverage, representative engagement metrics when present, and provenance/rights risks. This is the deterministic "what deserves attention, and why?" pass before importing or composing more assets.
 
+Filtered reports keep `total_count` plus a summary of recommendation and score-band counts, so agents can see the whole library distribution while only receiving the shortlist rows they asked for.
+
 ## Output layout
 
 Imported sounds are written under `library/sounds/imported/<slug>/`:

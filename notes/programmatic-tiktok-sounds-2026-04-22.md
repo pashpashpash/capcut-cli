@@ -68,7 +68,10 @@ The command should be offline and deterministic. It should read the committed ma
 
 This makes the next trust pass concrete: "given 20 imported sounds, surface the best 3 and explain why." That is the judgement layer the Discord discussion keeps orbiting around, and it gives agents a better target than blindly importing more assets.
 
-Implemented refinement: the judgement command now supports `--min-score`, repeated `--recommended-action`, and `--top`, so an agent can ask for a shortlist directly without post-processing the JSON dump.
+Implemented refinements:
+
+- the judgement command now supports `--min-score`, repeated `--recommended-action`, and `--top`, so an agent can ask for a shortlist directly without post-processing the JSON dump
+- filtered judgement reports keep an overall summary with recommendation-action and score-band counts, so the shortlist does not hide the shape of the full local library
 
 ## Provider ladder
 
