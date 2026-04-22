@@ -56,6 +56,12 @@ The command should be offline and deterministic. It should read the committed ma
 - `title`
 - `author`
 - `platform`
+- `source_url`
+- `source_video_url`
+- `song_id`
+- `clip_id`
+- `country_code`
+- `duration_seconds`
 - `downloaded_video_count`
 - `extracted_audio_count`
 - `candidate_post_count`
@@ -88,6 +94,7 @@ Implemented refinements:
 - judgement summaries now include `reason_count_coverage_counts` and `risk_count_coverage_counts`, so agents can compare signal and blocker density before opening individual rows
 - `--min-reason-count` lets shortlists require enough positive evidence before returning a sound, complementing `--max-risk-count` for blocker density
 - `--max-judgement-rank` keeps filtered passes inside the full-library top N by score, trend rank, and sound id, so narrow filters do not accidentally surface low-ranked candidates
+- returned sounds include source URLs and TikTok identifiers (`source_url`, `source_video_url`, `song_id`, `clip_id`, `country_code`, and `duration_seconds`), so shortlisted rows remain traceable without reopening the manifest
 - `--min-representative-views`, `--min-representative-likes`, `--min-representative-comments`, and `--min-representative-shares` let the shortlist require direct engagement, discussion, and spread evidence instead of trusting chart rank alone
 - returned sounds include `representative_engagement_count`, and `--min-representative-engagements` lets shortlists require absolute likes, comments, and shares volume before trusting dense but tiny samples
 - judgement summaries now include `representative_engagement_count_band_counts`, so agents can compare absolute engagement-volume distribution before opening individual rows

@@ -728,6 +728,12 @@ fn judge_manifest_entry(manifest_path: &Path, entry: &ManifestEntry) -> Result<J
         title: entry.title.clone(),
         author: entry.author.clone(),
         platform: entry.platform.clone(),
+        source_url: entry.source_url.clone(),
+        source_video_url: entry.source_video_url.clone(),
+        song_id: entry.song_id.clone(),
+        clip_id: entry.clip_id.clone(),
+        country_code: entry.country_code.clone(),
+        duration_seconds: entry.duration_seconds,
         downloaded_video_count,
         extracted_audio_count,
         usable_asset_pair_count,
@@ -1954,6 +1960,12 @@ mod tests {
             title: id.to_string(),
             author: "creator".to_string(),
             platform: "tiktok".to_string(),
+            source_url: format!("https://www.tiktok.com/music/{id}"),
+            source_video_url: Some(format!("https://www.tiktok.com/@creator/video/{id}")),
+            song_id: Some(id.to_string()),
+            clip_id: Some(format!("{id}_clip")),
+            country_code: Some("US".to_string()),
+            duration_seconds: Some(12),
             downloaded_video_count: Some(1),
             extracted_audio_count: Some(1),
             usable_asset_pair_count: Some(1),
@@ -2048,6 +2060,18 @@ mod tests {
 
         assert_eq!(judged.score, 100);
         assert_eq!(judged.recommended_action, "shortlist_after_rights_review");
+        assert_eq!(
+            judged.source_url,
+            "https://www.tiktok.com/music/example-123"
+        );
+        assert_eq!(
+            judged.source_video_url,
+            Some("https://www.tiktok.com/@creator/video/123".to_string())
+        );
+        assert_eq!(judged.song_id, Some("123".to_string()));
+        assert_eq!(judged.clip_id, Some("456".to_string()));
+        assert_eq!(judged.country_code, Some("US".to_string()));
+        assert_eq!(judged.duration_seconds, Some(12));
         assert_eq!(judged.candidate_post_count, None);
         assert_eq!(judged.usable_asset_pair_count, Some(2));
         assert_eq!(judged.representative_engagement_count, Some(129_000));
