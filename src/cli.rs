@@ -444,11 +444,13 @@ impl JudgeSoundArgs {
             self.min_representative_likes,
             self.top,
         );
+        let filtered_out_count = total_count - sounds.len();
 
         Ok(AppReport::SoundJudgement(SoundJudgementReport {
             manifest_path: self.manifest.display().to_string(),
             total_count,
             judged_count: sounds.len(),
+            filtered_out_count,
             filters,
             summary,
             sounds,

@@ -148,6 +148,7 @@ pub struct SoundJudgementReport {
     pub manifest_path: String,
     pub total_count: usize,
     pub judged_count: usize,
+    pub filtered_out_count: usize,
     pub filters: SoundJudgementFilters,
     pub summary: SoundJudgementSummary,
     pub sounds: Vec<JudgedSound>,
