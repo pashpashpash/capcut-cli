@@ -161,6 +161,7 @@ pub struct SoundJudgementFilters {
     pub top: Option<usize>,
     pub min_score: Option<u32>,
     pub max_trend_rank: Option<u32>,
+    pub max_judgement_rank: Option<usize>,
     pub platforms: Vec<String>,
     pub required_reasons: Vec<String>,
     pub recommended_actions: Vec<String>,
