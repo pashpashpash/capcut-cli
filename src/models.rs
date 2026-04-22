@@ -171,6 +171,7 @@ pub struct SoundJudgementFilters {
 pub struct SoundJudgementSummary {
     pub recommended_action_counts: Vec<RecommendedActionCount>,
     pub score_band_counts: Vec<ScoreBandCount>,
+    pub reason_counts: Vec<ReasonCount>,
     pub risk_counts: Vec<RiskCount>,
 }
 
@@ -183,6 +184,12 @@ pub struct RecommendedActionCount {
 #[derive(Debug, Serialize)]
 pub struct ScoreBandCount {
     pub band: String,
+    pub count: usize,
+}
+
+#[derive(Debug, Serialize)]
+pub struct ReasonCount {
+    pub reason: String,
     pub count: usize,
 }
 

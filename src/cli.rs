@@ -9,8 +9,8 @@ use crate::{
     config::{self, APIFY_CONFIG_ENV, TIKTOK_SOUND_RESOLVER_ACTOR_ID_ENV},
     models::{
         AppReport, AuthReport, DiscoverSource, DiscoveryReport, JudgedSound, LibraryReport,
-        MediaReport, PipelineStep, PipelineStepKind, RecommendedActionCount, RiskCount,
-        ScoreBandCount, SoundImportReport, SoundJudgementFilters, SoundJudgementReport,
+        MediaReport, PipelineStep, PipelineStepKind, ReasonCount, RecommendedActionCount,
+        RiskCount, ScoreBandCount, SoundImportReport, SoundJudgementFilters, SoundJudgementReport,
         SoundJudgementSummary, UpdateReport,
     },
     tiktok::{
@@ -475,6 +475,7 @@ impl JudgeSoundArgs {
 fn summarize_judged_sounds(sounds: &[JudgedSound]) -> SoundJudgementSummary {
     let mut recommended_action_counts = BTreeMap::new();
     let mut score_band_counts = BTreeMap::new();
+    let mut reason_counts = BTreeMap::new();
     let mut risk_counts = BTreeMap::new();
 
     for sound in sounds {
@@ -484,6 +485,9 @@ fn summarize_judged_sounds(sounds: &[JudgedSound]) -> SoundJudgementSummary {
         *score_band_counts
             .entry(score_band(sound.score).to_string())
             .or_insert(0) += 1;
+        for reason in &sound.reasons {
+            *reason_counts.entry(reason.clone()).or_insert(0) += 1;
+        }
         for risk in &sound.risks {
             *risk_counts.entry(risk.clone()).or_insert(0) += 1;
         }
@@ -500,6 +504,10 @@ fn summarize_judged_sounds(sounds: &[JudgedSound]) -> SoundJudgementSummary {
         score_band_counts: score_band_counts
             .into_iter()
             .map(|(band, count)| ScoreBandCount { band, count })
+            .collect(),
+        reason_counts: reason_counts
+            .into_iter()
+            .map(|(reason, count)| ReasonCount { reason, count })
             .collect(),
         risk_counts: risk_counts
             .into_iter()
@@ -790,12 +798,21 @@ mod tests {
     }
 
     #[test]
-    fn summarize_judged_sounds_counts_actions_score_bands_and_risks() {
+    fn summarize_judged_sounds_counts_actions_score_bands_reasons_and_risks() {
         let mut rights_risk = judged_sound("sound_a", 95, "shortlist_after_rights_review");
+        rights_risk
+            .reasons
+            .push("Top 10 trend rank is recorded".to_string());
         rights_risk
             .risks
             .push("Rights still need manual verification before production use".to_string());
         let mut metrics_risk = judged_sound("sound_b", 82, "shortlist_after_rights_review");
+        metrics_risk
+            .reasons
+            .push("Top 10 trend rank is recorded".to_string());
+        metrics_risk
+            .reasons
+            .push("Multiple local videos are available".to_string());
         metrics_risk
             .risks
             .push("No representative engagement metrics are recorded".to_string());
@@ -829,6 +846,14 @@ mod tests {
                 .iter()
                 .any(|count| { count.band == "0_29" && count.count == 1 })
         );
+        assert!(
+            summary.reason_counts.iter().any(|count| {
+                count.reason == "Top 10 trend rank is recorded" && count.count == 2
+            })
+        );
+        assert!(summary.reason_counts.iter().any(|count| {
+            count.reason == "Multiple local videos are available" && count.count == 1
+        }));
         assert!(summary.risk_counts.iter().any(|count| {
             count.risk == "Rights still need manual verification before production use"
                 && count.count == 2

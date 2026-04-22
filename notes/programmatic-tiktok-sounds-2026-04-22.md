@@ -79,6 +79,7 @@ Implemented refinements:
 - `filtered_summary` summarizes the returned shortlist separately from the full-library `summary`, which makes narrow passes easier to inspect without re-counting rows
 - repeated `--exclude-risk` filters remove sounds whose risk text contains a matching substring, allowing production-oriented passes to drop known blockers such as unresolved rights review
 - judgement summaries now include risk text counts, so risk-filtered runs can show both the returned shortlist risks and the full-library blocker distribution
+- judgement summaries now include reason text counts, so agents can see which positive signals are actually driving a shortlist instead of reading every returned row
 
 ## Provider ladder
 
