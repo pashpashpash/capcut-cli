@@ -397,6 +397,12 @@ struct JudgeSoundArgs {
 
     #[arg(long)]
     min_extracted_audios: Option<usize>,
+
+    #[arg(long)]
+    min_representative_views: Option<u64>,
+
+    #[arg(long)]
+    min_representative_likes: Option<u64>,
 }
 
 impl JudgeSoundArgs {
@@ -424,6 +430,8 @@ impl JudgeSoundArgs {
             &self.recommended_actions,
             self.min_downloaded_videos,
             self.min_extracted_audios,
+            self.min_representative_views,
+            self.min_representative_likes,
             self.top,
         );
 
@@ -480,6 +488,8 @@ fn filter_judged_sounds(
     recommended_actions: &[String],
     min_downloaded_videos: Option<usize>,
     min_extracted_audios: Option<usize>,
+    min_representative_views: Option<u64>,
+    min_representative_likes: Option<u64>,
     top: Option<usize>,
 ) -> Vec<JudgedSound> {
     if let Some(min_score) = min_score {
@@ -503,6 +513,18 @@ fn filter_judged_sounds(
     if let Some(min_extracted_audios) = min_extracted_audios {
         sounds.retain(|sound| {
             sound.extracted_audio_count.unwrap_or_default() >= min_extracted_audios
+        });
+    }
+
+    if let Some(min_representative_views) = min_representative_views {
+        sounds.retain(|sound| {
+            sound.representative_view_count.unwrap_or_default() >= min_representative_views
+        });
+    }
+
+    if let Some(min_representative_likes) = min_representative_likes {
+        sounds.retain(|sound| {
+            sound.representative_like_count.unwrap_or_default() >= min_representative_likes
         });
     }
 
@@ -626,6 +648,8 @@ mod tests {
             &["USE_FIRST".to_string(), "shortlist".to_string()],
             None,
             None,
+            None,
+            None,
             Some(1),
         );
 
@@ -649,6 +673,33 @@ mod tests {
             &[],
             Some(2),
             Some(2),
+            None,
+            None,
+            None,
+        );
+
+        assert_eq!(filtered.len(), 1);
+        assert_eq!(filtered[0].sound_id, "sound_a");
+    }
+
+    #[test]
+    fn filter_judged_sounds_applies_engagement_thresholds() {
+        let mut high_engagement = judged_sound("sound_a", 95, "shortlist_after_rights_review");
+        high_engagement.representative_view_count = Some(2_000_000);
+        high_engagement.representative_like_count = Some(150_000);
+        let mut low_likes = judged_sound("sound_b", 95, "shortlist_after_rights_review");
+        low_likes.representative_view_count = Some(2_000_000);
+        low_likes.representative_like_count = Some(25_000);
+        let missing_metrics = judged_sound("sound_c", 95, "shortlist_after_rights_review");
+
+        let filtered = filter_judged_sounds(
+            vec![high_engagement, low_likes, missing_metrics],
+            None,
+            &[],
+            None,
+            None,
+            Some(1_000_000),
+            Some(100_000),
             None,
         );
 
