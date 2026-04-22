@@ -197,6 +197,8 @@ pub struct SoundJudgementSummary {
     pub trend_rank_band_counts: Vec<TrendRankBandCount>,
     pub judgement_rank_band_counts: Vec<JudgementRankBandCount>,
     pub duration_seconds_band_counts: Vec<DurationSecondsBandCount>,
+    pub source_identifier_coverage_counts: Vec<SourceIdentifierCoverageCount>,
+    pub source_identifier_field_counts: Vec<SourceIdentifierFieldCount>,
     pub reason_count_coverage_counts: Vec<ReasonCountCoverageCount>,
     pub risk_count_coverage_counts: Vec<RiskCountCoverageCount>,
     pub downloaded_video_coverage_counts: Vec<DownloadedVideoCoverageCount>,
@@ -217,6 +219,7 @@ pub struct SoundJudgementSummary {
     pub representative_engagement_rate_band_counts: Vec<RepresentativeEngagementRateBandCount>,
     pub representative_comment_rate_band_counts: Vec<RepresentativeCommentRateBandCount>,
     pub representative_share_rate_band_counts: Vec<RepresentativeShareRateBandCount>,
+    pub missing_source_identifier_field_counts: Vec<MissingSourceIdentifierFieldCount>,
     pub missing_local_artifact_path_field_counts: Vec<MissingLocalArtifactPathFieldCount>,
     pub missing_engagement_metric_field_counts: Vec<MissingEngagementMetricFieldCount>,
     pub reason_counts: Vec<ReasonCount>,
@@ -256,6 +259,18 @@ pub struct JudgementRankBandCount {
 #[derive(Debug, Serialize)]
 pub struct DurationSecondsBandCount {
     pub band: String,
+    pub count: usize,
+}
+
+#[derive(Debug, Serialize)]
+pub struct SourceIdentifierCoverageCount {
+    pub source_identifier_count: usize,
+    pub count: usize,
+}
+
+#[derive(Debug, Serialize)]
+pub struct SourceIdentifierFieldCount {
+    pub field: String,
     pub count: usize,
 }
 
@@ -370,6 +385,12 @@ pub struct RepresentativeCommentRateBandCount {
 #[derive(Debug, Serialize)]
 pub struct RepresentativeShareRateBandCount {
     pub band: String,
+    pub count: usize,
+}
+
+#[derive(Debug, Serialize)]
+pub struct MissingSourceIdentifierFieldCount {
+    pub field: String,
     pub count: usize,
 }
 

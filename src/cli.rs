@@ -12,16 +12,17 @@ use crate::{
         DownloadedVideoCoverageCount, DurationSecondsBandCount, EngagementMetricCoverageCount,
         ExtractedAudioCoverageCount, JudgedSound, JudgementRankBandCount, LibraryReport,
         LocalArtifactPathCoverageCount, LocalArtifactPathFieldCount, MediaReport,
-        MissingEngagementMetricFieldCount, MissingLocalArtifactPathFieldCount, PipelineStep,
-        PipelineStepKind, PlatformCount, ReasonCount, ReasonCountCoverageCount,
-        RecommendedActionCount, RepresentativeCommentCountBandCount,
-        RepresentativeCommentRateBandCount, RepresentativeEngagementCountBandCount,
-        RepresentativeEngagementMetricFieldCount, RepresentativeEngagementRateBandCount,
-        RepresentativeLikeCountBandCount, RepresentativeLikeRateBandCount,
-        RepresentativeShareCountBandCount, RepresentativeShareRateBandCount,
-        RepresentativeViewCountBandCount, RiskCount, RiskCountCoverageCount, ScoreBandCount,
-        SoundImportReport, SoundJudgementFilters, SoundJudgementReport, SoundJudgementSummary,
-        TrendRankBandCount, UpdateReport, UsableAssetPairCoverageCount,
+        MissingEngagementMetricFieldCount, MissingLocalArtifactPathFieldCount,
+        MissingSourceIdentifierFieldCount, PipelineStep, PipelineStepKind, PlatformCount,
+        ReasonCount, ReasonCountCoverageCount, RecommendedActionCount,
+        RepresentativeCommentCountBandCount, RepresentativeCommentRateBandCount,
+        RepresentativeEngagementCountBandCount, RepresentativeEngagementMetricFieldCount,
+        RepresentativeEngagementRateBandCount, RepresentativeLikeCountBandCount,
+        RepresentativeLikeRateBandCount, RepresentativeShareCountBandCount,
+        RepresentativeShareRateBandCount, RepresentativeViewCountBandCount, RiskCount,
+        RiskCountCoverageCount, ScoreBandCount, SoundImportReport, SoundJudgementFilters,
+        SoundJudgementReport, SoundJudgementSummary, SourceIdentifierCoverageCount,
+        SourceIdentifierFieldCount, TrendRankBandCount, UpdateReport, UsableAssetPairCoverageCount,
     },
     tiktok::{
         self, DEFAULT_IMPORT_OUTPUT_DIR, ImportTrendingSoundsOptions, LIBRARY_MANIFEST_PATH,
@@ -36,6 +37,14 @@ const REPRESENTATIVE_ENGAGEMENT_METRIC_FIELDS: [&str; 4] = [
     "representative_like_count",
     "representative_comment_count",
     "representative_share_count",
+];
+const SOURCE_IDENTIFIER_FIELDS: [&str; 6] = [
+    "source_url",
+    "source_video_url",
+    "song_id",
+    "clip_id",
+    "country_code",
+    "duration_seconds",
 ];
 const LOCAL_ARTIFACT_PATH_FIELDS: [&str; 7] = [
     "local_audio_path",
@@ -700,6 +709,8 @@ fn summarize_judged_sounds(sounds: &[JudgedSound]) -> SoundJudgementSummary {
     let mut trend_rank_band_counts = BTreeMap::new();
     let mut judgement_rank_band_counts = BTreeMap::new();
     let mut duration_seconds_band_counts = BTreeMap::new();
+    let mut source_identifier_coverage_counts = BTreeMap::new();
+    let mut source_identifier_field_counts = BTreeMap::new();
     let mut reason_count_coverage_counts = BTreeMap::new();
     let mut risk_count_coverage_counts = BTreeMap::new();
     let mut downloaded_video_coverage_counts = BTreeMap::new();
@@ -719,6 +730,7 @@ fn summarize_judged_sounds(sounds: &[JudgedSound]) -> SoundJudgementSummary {
     let mut representative_engagement_rate_band_counts = BTreeMap::new();
     let mut representative_comment_rate_band_counts = BTreeMap::new();
     let mut representative_share_rate_band_counts = BTreeMap::new();
+    let mut missing_source_identifier_field_counts = BTreeMap::new();
     let mut missing_local_artifact_path_field_counts = BTreeMap::new();
     let mut missing_engagement_metric_field_counts = BTreeMap::new();
     let mut reason_counts = BTreeMap::new();
@@ -741,6 +753,20 @@ fn summarize_judged_sounds(sounds: &[JudgedSound]) -> SoundJudgementSummary {
         *duration_seconds_band_counts
             .entry(duration_seconds_band(sound.duration_seconds).to_string())
             .or_insert(0) += 1;
+        let source_identifier_fields = source_identifier_fields(sound);
+        *source_identifier_coverage_counts
+            .entry(source_identifier_fields.len())
+            .or_insert(0) += 1;
+        for field in source_identifier_fields {
+            *source_identifier_field_counts
+                .entry(field.to_string())
+                .or_insert(0) += 1;
+        }
+        for field in missing_source_identifier_fields(sound) {
+            *missing_source_identifier_field_counts
+                .entry(field.to_string())
+                .or_insert(0) += 1;
+        }
         *reason_count_coverage_counts
             .entry(sound.reasons.len())
             .or_insert(0) += 1;
@@ -865,6 +891,19 @@ fn summarize_judged_sounds(sounds: &[JudgedSound]) -> SoundJudgementSummary {
         duration_seconds_band_counts: duration_seconds_band_counts
             .into_iter()
             .map(|(band, count)| DurationSecondsBandCount { band, count })
+            .collect(),
+        source_identifier_coverage_counts: source_identifier_coverage_counts
+            .into_iter()
+            .map(
+                |(source_identifier_count, count)| SourceIdentifierCoverageCount {
+                    source_identifier_count,
+                    count,
+                },
+            )
+            .collect(),
+        source_identifier_field_counts: source_identifier_field_counts
+            .into_iter()
+            .map(|(field, count)| SourceIdentifierFieldCount { field, count })
             .collect(),
         reason_count_coverage_counts: reason_count_coverage_counts
             .into_iter()
@@ -1001,6 +1040,10 @@ fn summarize_judged_sounds(sounds: &[JudgedSound]) -> SoundJudgementSummary {
                 count,
             })
             .collect(),
+        missing_source_identifier_field_counts: missing_source_identifier_field_counts
+            .into_iter()
+            .map(|(field, count)| MissingSourceIdentifierFieldCount { field, count })
+            .collect(),
         missing_local_artifact_path_field_counts: missing_local_artifact_path_field_counts
             .into_iter()
             .map(|(field, count)| MissingLocalArtifactPathFieldCount { field, count })
@@ -1059,6 +1102,46 @@ fn duration_seconds_band(duration_seconds: Option<u32>) -> &'static str {
         Some(1..=9) => "1_9",
         Some(0) => "0",
         None => "missing",
+    }
+}
+
+fn source_identifier_fields(sound: &JudgedSound) -> Vec<&'static str> {
+    SOURCE_IDENTIFIER_FIELDS
+        .iter()
+        .copied()
+        .filter(|field| has_source_identifier_field(sound, field))
+        .collect()
+}
+
+fn missing_source_identifier_fields(sound: &JudgedSound) -> Vec<&'static str> {
+    SOURCE_IDENTIFIER_FIELDS
+        .iter()
+        .copied()
+        .filter(|field| !has_source_identifier_field(sound, field))
+        .collect()
+}
+
+fn has_source_identifier_field(sound: &JudgedSound, field: &str) -> bool {
+    match field {
+        "source_url" => !sound.source_url.trim().is_empty(),
+        "source_video_url" => sound
+            .source_video_url
+            .as_deref()
+            .is_some_and(|value| !value.trim().is_empty()),
+        "song_id" => sound
+            .song_id
+            .as_deref()
+            .is_some_and(|value| !value.trim().is_empty()),
+        "clip_id" => sound
+            .clip_id
+            .as_deref()
+            .is_some_and(|value| !value.trim().is_empty()),
+        "country_code" => sound
+            .country_code
+            .as_deref()
+            .is_some_and(|value| !value.trim().is_empty()),
+        "duration_seconds" => sound.duration_seconds.is_some(),
+        _ => false,
     }
 }
 
@@ -2434,6 +2517,11 @@ mod tests {
             "local_download_path".to_string(),
         ];
         let mut skip_for_now = judged_sound("sound_e", 20, "skip_for_now");
+        skip_for_now.source_url = String::new();
+        skip_for_now.source_video_url = None;
+        skip_for_now.song_id = None;
+        skip_for_now.clip_id = None;
+        skip_for_now.country_code = None;
         skip_for_now.duration_seconds = None;
         skip_for_now.downloaded_video_count = None;
         skip_for_now.extracted_audio_count = None;
@@ -2573,6 +2661,42 @@ mod tests {
                 .duration_seconds_band_counts
                 .iter()
                 .any(|count| { count.band == "missing" && count.count == 1 })
+        );
+        assert!(
+            summary
+                .source_identifier_coverage_counts
+                .iter()
+                .any(|count| { count.source_identifier_count == 6 && count.count == 4 })
+        );
+        assert!(
+            summary
+                .source_identifier_coverage_counts
+                .iter()
+                .any(|count| { count.source_identifier_count == 0 && count.count == 1 })
+        );
+        assert!(
+            summary
+                .source_identifier_field_counts
+                .iter()
+                .any(|count| { count.field == "source_url" && count.count == 4 })
+        );
+        assert!(
+            summary
+                .source_identifier_field_counts
+                .iter()
+                .any(|count| { count.field == "duration_seconds" && count.count == 4 })
+        );
+        assert!(
+            summary
+                .missing_source_identifier_field_counts
+                .iter()
+                .any(|count| { count.field == "source_video_url" && count.count == 1 })
+        );
+        assert!(
+            summary
+                .missing_source_identifier_field_counts
+                .iter()
+                .any(|count| { count.field == "duration_seconds" && count.count == 1 })
         );
         assert!(
             summary
