@@ -85,6 +85,7 @@ Implemented refinements:
 - `--min-representative-views`, `--min-representative-likes`, `--min-representative-comments`, and `--min-representative-shares` let the shortlist require direct engagement, discussion, and spread evidence instead of trusting chart rank alone
 - returned sounds include `representative_engagement_count`, and `--min-representative-engagements` lets shortlists require absolute likes, comments, and shares volume before trusting dense but tiny samples
 - returned sounds include `representative_like_rate_per_1000_views`, and `--min-representative-like-rate-per-1000-views` lets viral shortlists require like density relative to reach instead of raw like counts alone
+- judgement summaries now include `representative_like_rate_band_counts`, so agents can compare like-density distribution before opening individual rows
 - returned sounds include `representative_engagement_rate_per_1000_views`, and `--min-representative-engagement-rate-per-1000-views` lets shortlists require total likes, comments, and shares density relative to reach
 - judgement summaries now include `representative_engagement_rate_band_counts`, so agents can spot missing, weak, or high-density virality evidence before opening individual rows
 - judgement summaries now include `representative_view_count_band_counts`, so agents can see reach distribution before opening individual rows

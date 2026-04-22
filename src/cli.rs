@@ -12,8 +12,9 @@ use crate::{
         EngagementMetricCoverageCount, JudgedSound, LibraryReport, MediaReport,
         MissingEngagementMetricFieldCount, PipelineStep, PipelineStepKind, PlatformCount,
         ReasonCount, RecommendedActionCount, RepresentativeEngagementRateBandCount,
-        RepresentativeViewCountBandCount, RiskCount, ScoreBandCount, SoundImportReport,
-        SoundJudgementFilters, SoundJudgementReport, SoundJudgementSummary, UpdateReport,
+        RepresentativeLikeRateBandCount, RepresentativeViewCountBandCount, RiskCount,
+        ScoreBandCount, SoundImportReport, SoundJudgementFilters, SoundJudgementReport,
+        SoundJudgementSummary, UpdateReport,
     },
     tiktok::{
         self, DEFAULT_IMPORT_OUTPUT_DIR, ImportTrendingSoundsOptions, LIBRARY_MANIFEST_PATH,
@@ -605,6 +606,7 @@ fn summarize_judged_sounds(sounds: &[JudgedSound]) -> SoundJudgementSummary {
     let mut candidate_post_coverage_counts = BTreeMap::new();
     let mut engagement_metric_coverage_counts = BTreeMap::new();
     let mut representative_view_count_band_counts = BTreeMap::new();
+    let mut representative_like_rate_band_counts = BTreeMap::new();
     let mut representative_engagement_rate_band_counts = BTreeMap::new();
     let mut missing_engagement_metric_field_counts = BTreeMap::new();
     let mut reason_counts = BTreeMap::new();
@@ -627,6 +629,11 @@ fn summarize_judged_sounds(sounds: &[JudgedSound]) -> SoundJudgementSummary {
         *representative_view_count_band_counts
             .entry(representative_view_count_band(
                 sound.representative_view_count,
+            ))
+            .or_insert(0) += 1;
+        *representative_like_rate_band_counts
+            .entry(representative_like_rate_band(
+                sound.representative_like_rate_per_1000_views,
             ))
             .or_insert(0) += 1;
         *representative_engagement_rate_band_counts
@@ -686,6 +693,13 @@ fn summarize_judged_sounds(sounds: &[JudgedSound]) -> SoundJudgementSummary {
                 count,
             })
             .collect(),
+        representative_like_rate_band_counts: representative_like_rate_band_counts
+            .into_iter()
+            .map(|(band, count)| RepresentativeLikeRateBandCount {
+                band: band.to_string(),
+                count,
+            })
+            .collect(),
         representative_engagement_rate_band_counts: representative_engagement_rate_band_counts
             .into_iter()
             .map(|(band, count)| RepresentativeEngagementRateBandCount {
@@ -723,6 +737,17 @@ fn representative_view_count_band(view_count: Option<u64>) -> &'static str {
         Some(1_000_000..=9_999_999) => "1000000_9999999",
         Some(100_000..=999_999) => "100000_999999",
         Some(1..=99_999) => "1_99999",
+        Some(0) => "0",
+        None => "missing",
+    }
+}
+
+fn representative_like_rate_band(rate_per_1000_views: Option<u64>) -> &'static str {
+    match rate_per_1000_views {
+        Some(200..) => "200_plus",
+        Some(100..=199) => "100_199",
+        Some(50..=99) => "50_99",
+        Some(1..=49) => "1_49",
         Some(0) => "0",
         None => "missing",
     }
@@ -1548,6 +1573,7 @@ mod tests {
         let mut rights_risk = judged_sound("sound_a", 95, "shortlist_after_rights_review");
         rights_risk.candidate_post_count = Some(20);
         rights_risk.representative_view_count = Some(37_548_076);
+        rights_risk.representative_like_rate_per_1000_views = Some(197);
         rights_risk.representative_engagement_rate_per_1000_views = Some(235);
         rights_risk.representative_engagement_metric_count = 4;
         rights_risk
@@ -1559,6 +1585,7 @@ mod tests {
         let mut metrics_risk = judged_sound("sound_b", 82, "shortlist_after_rights_review");
         metrics_risk.candidate_post_count = Some(5);
         metrics_risk.representative_view_count = Some(2_500_000);
+        metrics_risk.representative_like_rate_per_1000_views = Some(70);
         metrics_risk.representative_engagement_rate_per_1000_views = Some(85);
         metrics_risk.representative_engagement_metric_count = 2;
         metrics_risk.missing_representative_engagement_metric_fields = vec![
@@ -1586,6 +1613,7 @@ mod tests {
         ];
         let mut weak_signal = judged_sound("sound_c", 65, "shortlist");
         weak_signal.representative_view_count = Some(75_000);
+        weak_signal.representative_like_rate_per_1000_views = Some(20);
         weak_signal.representative_engagement_rate_per_1000_views = Some(40);
         weak_signal.missing_representative_engagement_metric_fields = missing_fields.clone();
         let mut needs_review = judged_sound("sound_d", 40, "needs_review");
@@ -1688,6 +1716,30 @@ mod tests {
         assert!(
             summary
                 .representative_view_count_band_counts
+                .iter()
+                .any(|count| { count.band == "missing" && count.count == 2 })
+        );
+        assert!(
+            summary
+                .representative_like_rate_band_counts
+                .iter()
+                .any(|count| { count.band == "100_199" && count.count == 1 })
+        );
+        assert!(
+            summary
+                .representative_like_rate_band_counts
+                .iter()
+                .any(|count| { count.band == "50_99" && count.count == 1 })
+        );
+        assert!(
+            summary
+                .representative_like_rate_band_counts
+                .iter()
+                .any(|count| { count.band == "1_49" && count.count == 1 })
+        );
+        assert!(
+            summary
+                .representative_like_rate_band_counts
                 .iter()
                 .any(|count| { count.band == "missing" && count.count == 2 })
         );
