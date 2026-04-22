@@ -12,7 +12,7 @@ use serde_json::{Value, json};
 
 use crate::{
     apify::{self, ActorRun},
-    models::{DiscoveredSound, FailedSoundImport, ImportedSound},
+    models::{DiscoveredSound, FailedSoundImport, ImportedSound, JudgedSound},
 };
 
 pub const DEFAULT_IMPORT_OUTPUT_DIR: &str = "library/sounds/imported";
@@ -475,6 +475,191 @@ pub fn import_trending_sounds(
         imported,
         failed,
         manifest_path: options.manifest_path.clone(),
+    })
+}
+
+pub fn judge_sound_library(manifest_path: &Path) -> Result<Vec<JudgedSound>> {
+    let manifest = read_manifest(manifest_path)?;
+    let mut sounds = manifest
+        .sounds
+        .iter()
+        .map(|entry| judge_manifest_entry(manifest_path, entry))
+        .collect::<Result<Vec<_>>>()?;
+
+    sounds.sort_by(|left, right| {
+        right
+            .score
+            .cmp(&left.score)
+            .then_with(|| {
+                left.trend_rank
+                    .unwrap_or(u32::MAX)
+                    .cmp(&right.trend_rank.unwrap_or(u32::MAX))
+            })
+            .then_with(|| left.sound_id.cmp(&right.sound_id))
+    });
+
+    Ok(sounds)
+}
+
+fn judge_manifest_entry(manifest_path: &Path, entry: &ManifestEntry) -> Result<JudgedSound> {
+    let metadata = read_optional_metadata(manifest_path, &entry.local_metadata_path)?;
+    let downloaded_video_count = entry
+        .downloaded_video_count
+        .or_else(|| metadata_usize(&metadata, &[&["downloaded_video_count"]]))
+        .or_else(|| {
+            has_entry_or_metadata_path(
+                entry.local_video_path.as_deref(),
+                &metadata,
+                &[
+                    &["files", "representative_video_path"],
+                    &["files", "local_video_path"],
+                ],
+            )
+            .then_some(1)
+        });
+    let extracted_audio_count = entry
+        .extracted_audio_count
+        .or_else(|| metadata_usize(&metadata, &[&["extracted_audio_count"]]))
+        .or_else(|| {
+            has_entry_or_metadata_path(
+                Some(&entry.local_audio_path),
+                &metadata,
+                &[
+                    &["files", "representative_audio_path"],
+                    &["files", "local_audio_path"],
+                ],
+            )
+            .then_some(1)
+        });
+    let representative_view_count = entry.representative_view_count.or_else(|| {
+        metadata_u64(
+            &metadata,
+            &[
+                &["selection", "representative_view_count"],
+                &["selection", "selected_view_count"],
+            ],
+        )
+    });
+    let representative_like_count = entry.representative_like_count.or_else(|| {
+        metadata_u64(
+            &metadata,
+            &[
+                &["selection", "representative_like_count"],
+                &["selection", "selected_like_count"],
+            ],
+        )
+    });
+    let representative_comment_count = entry.representative_comment_count.or_else(|| {
+        metadata_u64(
+            &metadata,
+            &[
+                &["selection", "representative_comment_count"],
+                &["selection", "selected_comment_count"],
+            ],
+        )
+    });
+    let representative_share_count = entry.representative_share_count.or_else(|| {
+        metadata_u64(
+            &metadata,
+            &[
+                &["selection", "representative_share_count"],
+                &["selection", "selected_share_count"],
+            ],
+        )
+    });
+
+    let mut score = 0;
+    let mut reasons = Vec::new();
+    let mut risks = Vec::new();
+
+    if entry.platform == "tiktok" {
+        score += 10;
+        reasons.push("TikTok-sourced sound with platform provenance".to_string());
+    } else {
+        risks.push(format!(
+            "Platform `{}` is not a live TikTok sound source",
+            entry.platform
+        ));
+    }
+
+    if let Some(rank) = entry.trend_rank {
+        let rank_points = trend_rank_score(rank);
+        score += rank_points;
+        reasons.push(format!(
+            "Trend rank {rank} contributes {rank_points} points"
+        ));
+    } else {
+        risks.push("No trend rank is recorded".to_string());
+    }
+
+    match downloaded_video_count {
+        Some(count) if count > 1 => {
+            score += 15;
+            reasons.push(format!("{count} downloaded candidate videos are available"));
+        }
+        Some(1) => {
+            score += 10;
+            reasons.push("One downloaded candidate video is available".to_string());
+        }
+        _ => risks.push("No downloaded candidate video is recorded".to_string()),
+    }
+
+    match extracted_audio_count {
+        Some(count) if count > 1 => {
+            score += 20;
+            reasons.push(format!("{count} extracted audio assets are available"));
+        }
+        Some(1) => {
+            score += 15;
+            reasons.push("One extracted audio asset is available".to_string());
+        }
+        _ => risks.push("No extracted audio asset is recorded".to_string()),
+    }
+
+    add_engagement_signal(
+        representative_view_count,
+        representative_like_count,
+        representative_comment_count,
+        representative_share_count,
+        &mut score,
+        &mut reasons,
+        &mut risks,
+    );
+
+    if entry.resolver_actor_id.is_some() {
+        score += 5;
+        reasons.push("Resolver actor id is recorded for repeatability".to_string());
+    } else if entry.platform == "tiktok" {
+        risks.push("Resolver actor id is missing".to_string());
+    }
+
+    if entry
+        .rights_note
+        .to_ascii_lowercase()
+        .contains("verify rights")
+    {
+        risks.push("Rights still need manual verification before production use".to_string());
+    }
+
+    let score = score.min(100);
+    let recommended_action = recommended_action(score, &risks).to_string();
+
+    Ok(JudgedSound {
+        sound_id: entry.id.clone(),
+        trend_rank: entry.trend_rank,
+        title: entry.title.clone(),
+        author: entry.author.clone(),
+        platform: entry.platform.clone(),
+        downloaded_video_count,
+        extracted_audio_count,
+        representative_view_count,
+        representative_like_count,
+        representative_comment_count,
+        representative_share_count,
+        score,
+        reasons,
+        risks,
+        recommended_action,
     })
 }
 
@@ -1219,6 +1404,131 @@ fn rank_candidate_posts(candidates: &mut [CandidatePost]) {
     }
 }
 
+fn read_optional_metadata(manifest_path: &Path, metadata_path: &str) -> Result<Option<Value>> {
+    let path = resolve_library_path(manifest_path, metadata_path);
+    if !path.exists() {
+        return Ok(None);
+    }
+
+    let bytes = fs::read(&path).with_context(|| format!("failed to read {}", path.display()))?;
+    serde_json::from_slice(&bytes)
+        .with_context(|| format!("failed to parse {}", path.display()))
+        .map(Some)
+}
+
+fn resolve_library_path(manifest_path: &Path, value: &str) -> PathBuf {
+    let path = PathBuf::from(value);
+    if path.is_absolute() || path.exists() {
+        return path;
+    }
+
+    manifest_path
+        .parent()
+        .map(|parent| parent.join(&path))
+        .filter(|candidate| candidate.exists())
+        .unwrap_or(path)
+}
+
+fn metadata_u64(metadata: &Option<Value>, paths: &[&[&str]]) -> Option<u64> {
+    metadata.as_ref().and_then(|value| first_u64(value, paths))
+}
+
+fn metadata_usize(metadata: &Option<Value>, paths: &[&[&str]]) -> Option<usize> {
+    metadata_u64(metadata, paths).and_then(|value| usize::try_from(value).ok())
+}
+
+fn has_entry_or_metadata_path(
+    entry_path: Option<&str>,
+    metadata: &Option<Value>,
+    metadata_paths: &[&[&str]],
+) -> bool {
+    entry_path.is_some_and(|path| !path.trim().is_empty())
+        || metadata
+            .as_ref()
+            .and_then(|value| first_non_empty_string(value, metadata_paths))
+            .is_some()
+}
+
+fn trend_rank_score(rank: u32) -> u32 {
+    match rank {
+        1..=3 => 35,
+        4..=10 => 25,
+        11..=50 => 15,
+        _ => 5,
+    }
+}
+
+fn add_engagement_signal(
+    views: Option<u64>,
+    likes: Option<u64>,
+    comments: Option<u64>,
+    shares: Option<u64>,
+    score: &mut u32,
+    reasons: &mut Vec<String>,
+    risks: &mut Vec<String>,
+) {
+    let mut engagement_points = 0;
+
+    if let Some(value) = views {
+        let points = threshold_score(value, &[(1_000_000, 15), (100_000, 8), (1, 3)]);
+        engagement_points += points;
+        if points > 0 {
+            reasons.push(format!("{value} representative views are recorded"));
+        }
+    }
+
+    if let Some(value) = likes {
+        let points = threshold_score(value, &[(100_000, 20), (10_000, 12), (1, 5)]);
+        engagement_points += points;
+        if points > 0 {
+            reasons.push(format!("{value} representative likes are recorded"));
+        }
+    }
+
+    if let Some(value) = comments {
+        let points = threshold_score(value, &[(10_000, 8), (1_000, 4), (1, 2)]);
+        engagement_points += points;
+        if points > 0 {
+            reasons.push(format!("{value} representative comments are recorded"));
+        }
+    }
+
+    if let Some(value) = shares {
+        let points = threshold_score(value, &[(10_000, 8), (1_000, 4), (1, 2)]);
+        engagement_points += points;
+        if points > 0 {
+            reasons.push(format!("{value} representative shares are recorded"));
+        }
+    }
+
+    if engagement_points == 0 {
+        risks.push("No representative engagement metrics are recorded".to_string());
+    } else {
+        *score += engagement_points.min(25);
+    }
+}
+
+fn threshold_score(value: u64, thresholds: &[(u64, u32)]) -> u32 {
+    thresholds
+        .iter()
+        .find_map(|(minimum, points)| (value >= *minimum).then_some(*points))
+        .unwrap_or_default()
+}
+
+fn recommended_action(score: u32, risks: &[String]) -> &'static str {
+    let rights_review_needed = risks
+        .iter()
+        .any(|risk| risk.contains("Rights still need manual verification"));
+
+    match (score, rights_review_needed) {
+        (75..=100, false) => "use_first",
+        (75..=100, true) => "shortlist_after_rights_review",
+        (50..=74, _) => "shortlist",
+        (30..=49, _) => "needs_review",
+        _ => "skip_for_now",
+    }
+}
+
 fn read_manifest(path: &Path) -> Result<Manifest> {
     if !path.exists() {
         return Ok(Manifest::default());
@@ -1393,6 +1703,55 @@ fn values_at_path<'a>(value: &'a Value, path: &[&str]) -> Vec<&'a Value> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn judging_scores_imported_tiktok_sounds_and_flags_rights() {
+        let entry = ManifestEntry {
+            id: "tiktok_sound_123".to_string(),
+            title: "Example Sound".to_string(),
+            author: "Example Creator".to_string(),
+            platform: "tiktok".to_string(),
+            trend_rank: Some(1),
+            source_url: "https://www.tiktok.com/music/example-123".to_string(),
+            source_video_url: Some("https://www.tiktok.com/@creator/video/123".to_string()),
+            duration_seconds: Some(12),
+            local_audio_path: "library/sounds/imported/example/audio.mp3".to_string(),
+            local_metadata_path: "missing-metadata.json".to_string(),
+            rights_note: "For research only. Verify rights before production use.".to_string(),
+            provenance: "Imported from Apify trending sounds".to_string(),
+            song_id: Some("123".to_string()),
+            clip_id: Some("456".to_string()),
+            country_code: Some("US".to_string()),
+            local_video_path: Some("library/sounds/imported/example/video.mp4".to_string()),
+            local_trend_path: None,
+            local_posts_path: None,
+            local_selection_path: None,
+            local_download_path: None,
+            local_videos_dir: Some("library/sounds/imported/example/videos".to_string()),
+            local_audios_dir: Some("library/sounds/imported/example/audios".to_string()),
+            downloaded_video_count: Some(3),
+            extracted_audio_count: Some(2),
+            representative_video_url: Some("https://www.tiktok.com/@creator/video/123".to_string()),
+            representative_video_id: Some("123".to_string()),
+            representative_comment_count: Some(2_500),
+            representative_share_count: Some(1_500),
+            representative_like_count: Some(125_000),
+            representative_view_count: Some(1_500_000),
+            resolver_actor_id: Some("resolver".to_string()),
+            download_method: Some(DIRECT_DOWNLOAD_METHOD.to_string()),
+        };
+
+        let judged = judge_manifest_entry(Path::new("library/sounds/manifest.json"), &entry)
+            .expect("judged sound");
+
+        assert_eq!(judged.score, 100);
+        assert_eq!(judged.recommended_action, "shortlist_after_rights_review");
+        assert!(
+            judged.risks.contains(
+                &"Rights still need manual verification before production use".to_string()
+            )
+        );
+    }
 
     #[test]
     fn normalize_resolver_post_builds_canonical_video_url_and_media_urls() {

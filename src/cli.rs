@@ -8,7 +8,7 @@ use crate::{
     config::{self, APIFY_CONFIG_ENV, TIKTOK_SOUND_RESOLVER_ACTOR_ID_ENV},
     models::{
         AppReport, AuthReport, DiscoverSource, DiscoveryReport, LibraryReport, MediaReport,
-        PipelineStep, PipelineStepKind, SoundImportReport, UpdateReport,
+        PipelineStep, PipelineStepKind, SoundImportReport, SoundJudgementReport, UpdateReport,
     },
     tiktok::{
         self, DEFAULT_IMPORT_OUTPUT_DIR, ImportTrendingSoundsOptions, LIBRARY_MANIFEST_PATH,
@@ -293,6 +293,7 @@ impl SoundArgs {
     fn run(self) -> Result<AppReport> {
         match self.command {
             SoundCommand::ImportTiktokTrending(args) => args.run(),
+            SoundCommand::Judge(args) => args.run(),
         }
     }
 }
@@ -300,6 +301,7 @@ impl SoundArgs {
 #[derive(Debug, Subcommand)]
 enum SoundCommand {
     ImportTiktokTrending(ImportTiktokTrendingArgs),
+    Judge(JudgeSoundArgs),
 }
 
 #[derive(Debug, Args)]
@@ -370,6 +372,24 @@ impl ImportTiktokTrendingArgs {
             failed: result.failed,
             manifest_path: result.manifest_path.display().to_string(),
             output_dir: output_dir.display().to_string(),
+        }))
+    }
+}
+
+#[derive(Debug, Args)]
+struct JudgeSoundArgs {
+    #[arg(long, default_value = LIBRARY_MANIFEST_PATH)]
+    manifest: PathBuf,
+}
+
+impl JudgeSoundArgs {
+    fn run(self) -> Result<AppReport> {
+        let sounds = tiktok::judge_sound_library(&self.manifest)?;
+
+        Ok(AppReport::SoundJudgement(SoundJudgementReport {
+            manifest_path: self.manifest.display().to_string(),
+            judged_count: sounds.len(),
+            sounds,
         }))
     }
 }

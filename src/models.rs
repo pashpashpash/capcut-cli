@@ -5,6 +5,7 @@ use serde::Serialize;
 pub enum AppReport {
     Auth(AuthReport),
     SoundImport(SoundImportReport),
+    SoundJudgement(SoundJudgementReport),
     Discovery(DiscoveryReport),
     Library(LibraryReport),
     Media(MediaReport),
@@ -140,6 +141,32 @@ pub struct FailedSoundImport {
     pub clip_id: String,
     pub trend_link: String,
     pub error: String,
+}
+
+#[derive(Debug, Serialize)]
+pub struct SoundJudgementReport {
+    pub manifest_path: String,
+    pub judged_count: usize,
+    pub sounds: Vec<JudgedSound>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct JudgedSound {
+    pub sound_id: String,
+    pub trend_rank: Option<u32>,
+    pub title: String,
+    pub author: String,
+    pub platform: String,
+    pub downloaded_video_count: Option<usize>,
+    pub extracted_audio_count: Option<usize>,
+    pub representative_view_count: Option<u64>,
+    pub representative_like_count: Option<u64>,
+    pub representative_comment_count: Option<u64>,
+    pub representative_share_count: Option<u64>,
+    pub score: u32,
+    pub reasons: Vec<String>,
+    pub risks: Vec<String>,
+    pub recommended_action: String,
 }
 
 #[derive(Debug, Serialize)]

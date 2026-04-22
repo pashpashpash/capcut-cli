@@ -118,6 +118,16 @@ The ranking strategy is explicit and simple: `digg_count desc`, then resolver or
 
 `--download-attempts` is now the per-candidate retry budget for direct media download, not a cap on how many ranked posts are attempted.
 
+## Judge imported sounds
+
+Run an offline judgement pass over the local sound manifest:
+
+```bash
+cargo run -- library sound judge
+```
+
+The report scores each sound using recorded trend rank, downloaded/extracted asset coverage, representative engagement metrics when present, and provenance/rights risks. This is the deterministic "what deserves attention, and why?" pass before importing or composing more assets.
+
 ## Output layout
 
 Imported sounds are written under `library/sounds/imported/<slug>/`:
@@ -178,6 +188,7 @@ cargo run -- discover tiktok-sounds --limit 10
 cargo run -- discover x-clips --query "ai agents" --limit 10
 cargo run -- library plan sound
 cargo run -- library sound import-tiktok-trending --resolver-actor-id "<novi actor id>" --limit 3 --max-posts 20 --download-attempts 5
+cargo run -- library sound judge
 cargo run -- update --bin-path "$HOME/.local/bin/capcut-cli"
 cargo run -- compose --sound sound_123 --clip clip_a --clip clip_b --duration-seconds 30
 ```
