@@ -2049,6 +2049,7 @@ mod tests {
         assert_eq!(judged.score, 100);
         assert_eq!(judged.recommended_action, "shortlist_after_rights_review");
         assert_eq!(judged.candidate_post_count, None);
+        assert_eq!(judged.usable_asset_pair_count, Some(2));
         assert_eq!(judged.representative_engagement_count, Some(129_000));
         assert_eq!(judged.representative_like_rate_per_1000_views, Some(83));
         assert_eq!(
@@ -2162,6 +2163,7 @@ mod tests {
             .expect("judged sound");
 
         assert_eq!(judged.candidate_post_count, Some(20));
+        assert_eq!(judged.usable_asset_pair_count, Some(1));
         assert_eq!(judged.representative_view_count, Some(37_548_076));
         assert_eq!(judged.representative_like_count, Some(7_427_697));
         assert_eq!(judged.representative_engagement_count, Some(8_854_703));
