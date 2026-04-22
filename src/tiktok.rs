@@ -486,6 +486,12 @@ pub fn judge_sound_library(manifest_path: &Path) -> Result<Vec<JudgedSound>> {
         .map(|entry| judge_manifest_entry(manifest_path, entry))
         .collect::<Result<Vec<_>>>()?;
 
+    sort_and_rank_judged_sounds(&mut sounds);
+
+    Ok(sounds)
+}
+
+fn sort_and_rank_judged_sounds(sounds: &mut [JudgedSound]) {
     sounds.sort_by(|left, right| {
         right
             .score
@@ -498,7 +504,9 @@ pub fn judge_sound_library(manifest_path: &Path) -> Result<Vec<JudgedSound>> {
             .then_with(|| left.sound_id.cmp(&right.sound_id))
     });
 
-    Ok(sounds)
+    for (index, sound) in sounds.iter_mut().enumerate() {
+        sound.judgement_rank = Some(index + 1);
+    }
 }
 
 fn judge_manifest_entry(manifest_path: &Path, entry: &ManifestEntry) -> Result<JudgedSound> {
@@ -646,6 +654,7 @@ fn judge_manifest_entry(manifest_path: &Path, entry: &ManifestEntry) -> Result<J
 
     Ok(JudgedSound {
         sound_id: entry.id.clone(),
+        judgement_rank: None,
         trend_rank: entry.trend_rank,
         title: entry.title.clone(),
         author: entry.author.clone(),
@@ -1703,6 +1712,54 @@ fn values_at_path<'a>(value: &'a Value, path: &[&str]) -> Vec<&'a Value> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn judged_sound(id: &str, score: u32, trend_rank: Option<u32>) -> JudgedSound {
+        JudgedSound {
+            sound_id: id.to_string(),
+            judgement_rank: None,
+            trend_rank,
+            title: id.to_string(),
+            author: "creator".to_string(),
+            platform: "tiktok".to_string(),
+            downloaded_video_count: Some(1),
+            extracted_audio_count: Some(1),
+            representative_view_count: None,
+            representative_like_count: None,
+            representative_comment_count: None,
+            representative_share_count: None,
+            score,
+            reasons: Vec::new(),
+            risks: Vec::new(),
+            recommended_action: "shortlist_after_rights_review".to_string(),
+        }
+    }
+
+    #[test]
+    fn sort_and_rank_judged_sounds_assigns_stable_library_rank() {
+        let mut sounds = vec![
+            judged_sound("sound_c", 90, Some(2)),
+            judged_sound("sound_b", 90, Some(1)),
+            judged_sound("sound_a", 95, None),
+            judged_sound("sound_d", 90, Some(1)),
+        ];
+
+        sort_and_rank_judged_sounds(&mut sounds);
+
+        assert_eq!(
+            sounds
+                .iter()
+                .map(|sound| sound.sound_id.as_str())
+                .collect::<Vec<_>>(),
+            vec!["sound_a", "sound_b", "sound_d", "sound_c"]
+        );
+        assert_eq!(
+            sounds
+                .iter()
+                .map(|sound| sound.judgement_rank)
+                .collect::<Vec<_>>(),
+            vec![Some(1), Some(2), Some(3), Some(4)]
+        );
+    }
 
     #[test]
     fn judging_scores_imported_tiktok_sounds_and_flags_rights() {

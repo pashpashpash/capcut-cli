@@ -755,6 +755,7 @@ mod tests {
     fn judged_sound(id: &str, score: u32, recommended_action: &str) -> JudgedSound {
         JudgedSound {
             sound_id: id.to_string(),
+            judgement_rank: None,
             trend_rank: None,
             title: id.to_string(),
             author: "creator".to_string(),

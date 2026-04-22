@@ -214,6 +214,8 @@ pub struct RiskCount {
 #[derive(Debug, Clone, Serialize)]
 pub struct JudgedSound {
     pub sound_id: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub judgement_rank: Option<usize>,
     pub trend_rank: Option<u32>,
     pub title: String,
     pub author: String,

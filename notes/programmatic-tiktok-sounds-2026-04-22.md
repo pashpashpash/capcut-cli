@@ -79,6 +79,7 @@ Implemented refinements:
 - `filtered_out_count` makes zero-result or narrow-result reports explicit about how many sounds were removed by the filters
 - `filtered_summary` summarizes the returned shortlist separately from the full-library `summary`, which makes narrow passes easier to inspect without re-counting rows
 - `sort_order` is echoed in judgement reports so agents know returned rows are ordered by score descending, trend rank ascending, then sound id ascending
+- returned sounds include `judgement_rank` from the full sorted library, so filtered shortlists can still show where each candidate ranked before filters were applied
 - repeated `--exclude-risk` filters remove sounds whose risk text contains a matching substring, allowing production-oriented passes to drop known blockers such as unresolved rights review
 - `--max-risk-count` caps how many remaining risk notes a returned sound may carry, with `--max-risk-count 0` acting as a strict risk-free shortlist mode
 - judgement summaries now include risk text counts, so risk-filtered runs can show both the returned shortlist risks and the full-library blocker distribution
