@@ -149,6 +149,7 @@ pub struct SoundJudgementReport {
     pub total_count: usize,
     pub judged_count: usize,
     pub filtered_out_count: usize,
+    pub sort_order: String,
     pub filters: SoundJudgementFilters,
     pub summary: SoundJudgementSummary,
     pub filtered_summary: SoundJudgementSummary,

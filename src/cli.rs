@@ -20,6 +20,8 @@ use crate::{
     update,
 };
 
+const SOUND_JUDGEMENT_SORT_ORDER: &str = "score_desc_trend_rank_asc_sound_id_asc";
+
 #[derive(Debug, Parser)]
 #[command(
     name = "capcut-cli",
@@ -496,6 +498,7 @@ impl JudgeSoundArgs {
             total_count,
             judged_count: sounds.len(),
             filtered_out_count,
+            sort_order: SOUND_JUDGEMENT_SORT_ORDER.to_string(),
             filters,
             summary,
             filtered_summary,
