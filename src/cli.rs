@@ -421,6 +421,9 @@ struct JudgeSoundArgs {
     excluded_risks: Vec<String>,
 
     #[arg(long)]
+    min_reason_count: Option<usize>,
+
+    #[arg(long)]
     max_risk_count: Option<usize>,
 
     #[arg(long)]
@@ -544,6 +547,7 @@ impl JudgeSoundArgs {
             required_reasons: self.required_reasons.clone(),
             recommended_actions: self.recommended_actions.clone(),
             excluded_risks: self.excluded_risks.clone(),
+            min_reason_count: self.min_reason_count,
             max_risk_count: self.max_risk_count,
             min_downloaded_videos: self.min_downloaded_videos,
             min_extracted_audios: self.min_extracted_audios,
@@ -573,6 +577,7 @@ impl JudgeSoundArgs {
             &self.required_reasons,
             &self.recommended_actions,
             &self.excluded_risks,
+            self.min_reason_count,
             self.max_risk_count,
             self.min_downloaded_videos,
             self.min_extracted_audios,
@@ -982,6 +987,7 @@ fn filter_judged_sounds(
     required_reasons: &[String],
     recommended_actions: &[String],
     excluded_risks: &[String],
+    min_reason_count: Option<usize>,
     max_risk_count: Option<usize>,
     min_downloaded_videos: Option<usize>,
     min_extracted_audios: Option<usize>,
@@ -1035,6 +1041,10 @@ fn filter_judged_sounds(
                 .iter()
                 .any(|risk| matches_any_excluded_risk(risk, excluded_risks))
         });
+    }
+
+    if let Some(min_reason_count) = min_reason_count {
+        sounds.retain(|sound| sound.reasons.len() >= min_reason_count);
     }
 
     if let Some(max_risk_count) = max_risk_count {
@@ -1329,6 +1339,7 @@ mod tests {
             None,
             None,
             None,
+            None,
             &[],
             Some(1),
         );
@@ -1368,6 +1379,7 @@ mod tests {
             None,
             None,
             None,
+            None,
             &[],
             None,
         );
@@ -1390,6 +1402,7 @@ mod tests {
             &[],
             &[],
             &[],
+            None,
             None,
             None,
             None,
@@ -1453,6 +1466,51 @@ mod tests {
             None,
             None,
             None,
+            None,
+            &[],
+            None,
+        );
+
+        assert_eq!(filtered.len(), 1);
+        assert_eq!(filtered[0].sound_id, "sound_a");
+    }
+
+    #[test]
+    fn filter_judged_sounds_applies_reason_count_threshold() {
+        let mut rich_signal = judged_sound("sound_a", 95, "shortlist_after_rights_review");
+        rich_signal.reasons = vec![
+            "TikTok-sourced sound with platform provenance".to_string(),
+            "One downloaded candidate video is available".to_string(),
+        ];
+        let mut weak_signal = judged_sound("sound_b", 95, "shortlist_after_rights_review");
+        weak_signal
+            .reasons
+            .push("TikTok-sourced sound with platform provenance".to_string());
+
+        let filtered = filter_judged_sounds(
+            vec![rich_signal, weak_signal],
+            None,
+            None,
+            &[],
+            &[],
+            &[],
+            &[],
+            Some(2),
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
             &[],
             None,
         );
@@ -1486,6 +1544,7 @@ mod tests {
             &[],
             &[],
             &[],
+            None,
             None,
             Some(2),
             Some(2),
@@ -1605,6 +1664,7 @@ mod tests {
             None,
             None,
             None,
+            None,
             Some(1_000_000),
             Some(100_000),
             Some(250_000),
@@ -1639,6 +1699,7 @@ mod tests {
             &[],
             &[],
             &[],
+            None,
             None,
             None,
             None,
@@ -1699,6 +1760,7 @@ mod tests {
             None,
             None,
             None,
+            None,
             &[
                 "representative_view_count".to_string(),
                 "representative_like_count".to_string(),
@@ -1729,6 +1791,7 @@ mod tests {
             &[],
             &[],
             &["RIGHTS STILL NEED".to_string()],
+            None,
             None,
             None,
             None,
@@ -1775,6 +1838,7 @@ mod tests {
             &[],
             &[],
             &[],
+            None,
             Some(1),
             None,
             None,
