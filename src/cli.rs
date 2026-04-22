@@ -430,6 +430,9 @@ struct JudgeSoundArgs {
     min_extracted_audios: Option<usize>,
 
     #[arg(long)]
+    min_usable_asset_pairs: Option<usize>,
+
+    #[arg(long)]
     min_candidate_posts: Option<usize>,
 
     #[arg(long)]
@@ -544,6 +547,7 @@ impl JudgeSoundArgs {
             max_risk_count: self.max_risk_count,
             min_downloaded_videos: self.min_downloaded_videos,
             min_extracted_audios: self.min_extracted_audios,
+            min_usable_asset_pairs: self.min_usable_asset_pairs,
             min_candidate_posts: self.min_candidate_posts,
             min_representative_views: self.min_representative_views,
             min_representative_likes: self.min_representative_likes,
@@ -572,6 +576,7 @@ impl JudgeSoundArgs {
             self.max_risk_count,
             self.min_downloaded_videos,
             self.min_extracted_audios,
+            self.min_usable_asset_pairs,
             self.min_candidate_posts,
             self.min_representative_views,
             self.min_representative_likes,
@@ -961,6 +966,7 @@ fn filter_judged_sounds(
     max_risk_count: Option<usize>,
     min_downloaded_videos: Option<usize>,
     min_extracted_audios: Option<usize>,
+    min_usable_asset_pairs: Option<usize>,
     min_candidate_posts: Option<usize>,
     min_representative_views: Option<u64>,
     min_representative_likes: Option<u64>,
@@ -1025,6 +1031,12 @@ fn filter_judged_sounds(
     if let Some(min_extracted_audios) = min_extracted_audios {
         sounds.retain(|sound| {
             sound.extracted_audio_count.unwrap_or_default() >= min_extracted_audios
+        });
+    }
+
+    if let Some(min_usable_asset_pairs) = min_usable_asset_pairs {
+        sounds.retain(|sound| {
+            sound.usable_asset_pair_count.unwrap_or_default() >= min_usable_asset_pairs
         });
     }
 
@@ -1297,6 +1309,7 @@ mod tests {
             None,
             None,
             None,
+            None,
             &[],
             Some(1),
         );
@@ -1335,6 +1348,7 @@ mod tests {
             None,
             None,
             None,
+            None,
             &[],
             None,
         );
@@ -1357,6 +1371,7 @@ mod tests {
             &[],
             &[],
             &[],
+            None,
             None,
             None,
             None,
@@ -1418,6 +1433,7 @@ mod tests {
             None,
             None,
             None,
+            None,
             &[],
             None,
         );
@@ -1431,14 +1447,17 @@ mod tests {
         let mut strong_asset = judged_sound("sound_a", 95, "shortlist_after_rights_review");
         strong_asset.downloaded_video_count = Some(3);
         strong_asset.extracted_audio_count = Some(2);
+        strong_asset.usable_asset_pair_count = Some(2);
         strong_asset.candidate_post_count = Some(20);
         let mut weak_asset = judged_sound("sound_b", 95, "shortlist_after_rights_review");
         weak_asset.downloaded_video_count = Some(3);
         weak_asset.extracted_audio_count = Some(1);
+        weak_asset.usable_asset_pair_count = Some(1);
         weak_asset.candidate_post_count = Some(20);
         let mut missing_counts = judged_sound("sound_c", 95, "shortlist_after_rights_review");
         missing_counts.downloaded_video_count = Some(2);
         missing_counts.extracted_audio_count = Some(2);
+        missing_counts.usable_asset_pair_count = Some(2);
 
         let filtered = filter_judged_sounds(
             vec![strong_asset, weak_asset, missing_counts],
@@ -1449,6 +1468,7 @@ mod tests {
             &[],
             &[],
             None,
+            Some(2),
             Some(2),
             Some(2),
             Some(10),
@@ -1565,6 +1585,7 @@ mod tests {
             None,
             None,
             None,
+            None,
             Some(1_000_000),
             Some(100_000),
             Some(250_000),
@@ -1599,6 +1620,7 @@ mod tests {
             &[],
             &[],
             &[],
+            None,
             None,
             None,
             None,
@@ -1657,6 +1679,7 @@ mod tests {
             None,
             None,
             None,
+            None,
             &[
                 "representative_view_count".to_string(),
                 "representative_like_count".to_string(),
@@ -1687,6 +1710,7 @@ mod tests {
             &[],
             &[],
             &["RIGHTS STILL NEED".to_string()],
+            None,
             None,
             None,
             None,
@@ -1733,6 +1757,7 @@ mod tests {
             &[],
             &[],
             Some(1),
+            None,
             None,
             None,
             None,
