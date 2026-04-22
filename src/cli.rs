@@ -442,6 +442,9 @@ struct JudgeSoundArgs {
     min_representative_shares: Option<u64>,
 
     #[arg(long)]
+    min_representative_share_rate_per_1000_views: Option<u64>,
+
+    #[arg(long)]
     min_representative_engagement_metrics: Option<usize>,
 
     #[arg(long = "require-engagement-metric-field")]
@@ -534,6 +537,8 @@ impl JudgeSoundArgs {
                 .min_representative_engagement_rate_per_1000_views,
             min_representative_comments: self.min_representative_comments,
             min_representative_shares: self.min_representative_shares,
+            min_representative_share_rate_per_1000_views: self
+                .min_representative_share_rate_per_1000_views,
             min_representative_engagement_metrics: self.min_representative_engagement_metrics,
             required_engagement_metric_fields: self.required_engagement_metric_fields.clone(),
         };
@@ -554,6 +559,7 @@ impl JudgeSoundArgs {
             self.min_representative_engagement_rate_per_1000_views,
             self.min_representative_comments,
             self.min_representative_shares,
+            self.min_representative_share_rate_per_1000_views,
             self.min_representative_engagement_metrics,
             &self.required_engagement_metric_fields,
             self.top,
@@ -674,6 +680,7 @@ fn filter_judged_sounds(
     min_representative_engagement_rate_per_1000_views: Option<u64>,
     min_representative_comments: Option<u64>,
     min_representative_shares: Option<u64>,
+    min_representative_share_rate_per_1000_views: Option<u64>,
     min_representative_engagement_metrics: Option<usize>,
     required_engagement_metric_fields: &[String],
     top: Option<usize>,
@@ -774,6 +781,17 @@ fn filter_judged_sounds(
     if let Some(min_representative_shares) = min_representative_shares {
         sounds.retain(|sound| {
             sound.representative_share_count.unwrap_or_default() >= min_representative_shares
+        });
+    }
+
+    if let Some(min_representative_share_rate_per_1000_views) =
+        min_representative_share_rate_per_1000_views
+    {
+        sounds.retain(|sound| {
+            sound
+                .representative_share_rate_per_1000_views
+                .unwrap_or_default()
+                >= min_representative_share_rate_per_1000_views
         });
     }
 
@@ -918,6 +936,7 @@ mod tests {
             representative_engagement_rate_per_1000_views: None,
             representative_comment_count: None,
             representative_share_count: None,
+            representative_share_rate_per_1000_views: None,
             representative_engagement_metric_count: 0,
             representative_engagement_metric_fields: Vec::new(),
             missing_representative_engagement_metric_fields: Vec::new(),
@@ -947,6 +966,7 @@ mod tests {
             &[],
             &["USE_FIRST".to_string(), "shortlist".to_string()],
             &[],
+            None,
             None,
             None,
             None,
@@ -991,6 +1011,7 @@ mod tests {
             None,
             None,
             None,
+            None,
             &[],
             None,
         );
@@ -1013,6 +1034,7 @@ mod tests {
             &[],
             &[],
             &[],
+            None,
             None,
             None,
             None,
@@ -1066,6 +1088,7 @@ mod tests {
             None,
             None,
             None,
+            None,
             &[],
             None,
         );
@@ -1102,6 +1125,7 @@ mod tests {
             None,
             None,
             None,
+            None,
             &[],
             None,
         );
@@ -1119,6 +1143,7 @@ mod tests {
         high_engagement.representative_engagement_rate_per_1000_views = Some(142);
         high_engagement.representative_comment_count = Some(15_000);
         high_engagement.representative_share_count = Some(120_000);
+        high_engagement.representative_share_rate_per_1000_views = Some(60);
         let mut low_discussion = judged_sound("sound_b", 95, "shortlist_after_rights_review");
         low_discussion.representative_view_count = Some(2_000_000);
         low_discussion.representative_like_count = Some(150_000);
@@ -1126,6 +1151,7 @@ mod tests {
         low_discussion.representative_engagement_rate_per_1000_views = Some(137);
         low_discussion.representative_comment_count = Some(5_000);
         low_discussion.representative_share_count = Some(120_000);
+        low_discussion.representative_share_rate_per_1000_views = Some(60);
         let mut low_spread = judged_sound("sound_c", 95, "shortlist_after_rights_review");
         low_spread.representative_view_count = Some(2_000_000);
         low_spread.representative_like_count = Some(150_000);
@@ -1133,6 +1159,7 @@ mod tests {
         low_spread.representative_engagement_rate_per_1000_views = Some(85);
         low_spread.representative_comment_count = Some(15_000);
         low_spread.representative_share_count = Some(5_000);
+        low_spread.representative_share_rate_per_1000_views = Some(2);
         let mut low_like_density = judged_sound("sound_d", 95, "shortlist_after_rights_review");
         low_like_density.representative_view_count = Some(10_000_000);
         low_like_density.representative_like_count = Some(150_000);
@@ -1140,7 +1167,16 @@ mod tests {
         low_like_density.representative_engagement_rate_per_1000_views = Some(28);
         low_like_density.representative_comment_count = Some(15_000);
         low_like_density.representative_share_count = Some(120_000);
-        let missing_metrics = judged_sound("sound_e", 95, "shortlist_after_rights_review");
+        low_like_density.representative_share_rate_per_1000_views = Some(12);
+        let mut low_share_density = judged_sound("sound_e", 95, "shortlist_after_rights_review");
+        low_share_density.representative_view_count = Some(10_000_000);
+        low_share_density.representative_like_count = Some(1_000_000);
+        low_share_density.representative_like_rate_per_1000_views = Some(100);
+        low_share_density.representative_engagement_rate_per_1000_views = Some(114);
+        low_share_density.representative_comment_count = Some(20_000);
+        low_share_density.representative_share_count = Some(120_000);
+        low_share_density.representative_share_rate_per_1000_views = Some(12);
+        let missing_metrics = judged_sound("sound_f", 95, "shortlist_after_rights_review");
 
         let filtered = filter_judged_sounds(
             vec![
@@ -1148,6 +1184,7 @@ mod tests {
                 low_discussion,
                 low_spread,
                 low_like_density,
+                low_share_density,
                 missing_metrics,
             ],
             None,
@@ -1165,6 +1202,7 @@ mod tests {
             Some(100),
             Some(10_000),
             Some(100_000),
+            Some(25),
             None,
             &[],
             None,
@@ -1190,6 +1228,7 @@ mod tests {
             &[],
             &[],
             &[],
+            None,
             None,
             None,
             None,
@@ -1240,6 +1279,7 @@ mod tests {
             None,
             None,
             None,
+            None,
             &[
                 "representative_view_count".to_string(),
                 "representative_like_count".to_string(),
@@ -1270,6 +1310,7 @@ mod tests {
             &[],
             &[],
             &["RIGHTS STILL NEED".to_string()],
+            None,
             None,
             None,
             None,
@@ -1312,6 +1353,7 @@ mod tests {
             &[],
             &[],
             Some(1),
+            None,
             None,
             None,
             None,

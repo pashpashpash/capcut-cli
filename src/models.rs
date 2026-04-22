@@ -174,6 +174,7 @@ pub struct SoundJudgementFilters {
     pub min_representative_engagement_rate_per_1000_views: Option<u64>,
     pub min_representative_comments: Option<u64>,
     pub min_representative_shares: Option<u64>,
+    pub min_representative_share_rate_per_1000_views: Option<u64>,
     pub min_representative_engagement_metrics: Option<usize>,
     pub required_engagement_metric_fields: Vec<String>,
 }
@@ -248,6 +249,7 @@ pub struct JudgedSound {
     pub representative_engagement_rate_per_1000_views: Option<u64>,
     pub representative_comment_count: Option<u64>,
     pub representative_share_count: Option<u64>,
+    pub representative_share_rate_per_1000_views: Option<u64>,
     pub representative_engagement_metric_count: usize,
     pub representative_engagement_metric_fields: Vec<String>,
     pub missing_representative_engagement_metric_fields: Vec<String>,

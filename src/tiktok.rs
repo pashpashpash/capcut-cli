@@ -599,6 +599,8 @@ fn judge_manifest_entry(manifest_path: &Path, entry: &ManifestEntry) -> Result<J
         ],
         representative_view_count,
     );
+    let representative_share_rate_per_1000_views =
+        rate_per_1000(representative_share_count, representative_view_count);
     let representative_engagement_metrics = [
         (
             "representative_view_count",
@@ -718,6 +720,7 @@ fn judge_manifest_entry(manifest_path: &Path, entry: &ManifestEntry) -> Result<J
         representative_engagement_rate_per_1000_views,
         representative_comment_count,
         representative_share_count,
+        representative_share_rate_per_1000_views,
         representative_engagement_metric_count,
         representative_engagement_metric_fields,
         missing_representative_engagement_metric_fields,
@@ -1890,6 +1893,7 @@ mod tests {
             representative_engagement_rate_per_1000_views: None,
             representative_comment_count: None,
             representative_share_count: None,
+            representative_share_rate_per_1000_views: None,
             representative_engagement_metric_count: 0,
             representative_engagement_metric_fields: Vec::new(),
             missing_representative_engagement_metric_fields: Vec::new(),
@@ -1976,6 +1980,7 @@ mod tests {
             judged.representative_engagement_rate_per_1000_views,
             Some(86)
         );
+        assert_eq!(judged.representative_share_rate_per_1000_views, Some(1));
         assert_eq!(judged.representative_engagement_metric_count, 4);
         assert_eq!(
             judged.representative_engagement_metric_fields,
@@ -2080,6 +2085,7 @@ mod tests {
         );
         assert_eq!(judged.representative_comment_count, Some(51_294));
         assert_eq!(judged.representative_share_count, Some(1_375_712));
+        assert_eq!(judged.representative_share_rate_per_1000_views, Some(36));
         assert_eq!(judged.representative_engagement_metric_count, 4);
         assert_eq!(judged.score, 100);
 
