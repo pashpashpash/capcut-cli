@@ -474,6 +474,12 @@ struct JudgeSoundArgs {
     #[arg(long = "require-source-identifier-field")]
     required_source_identifier_fields: Vec<String>,
 
+    #[arg(long, default_value_t = false)]
+    require_resolver_actor_id: bool,
+
+    #[arg(long = "require-download-method")]
+    required_download_methods: Vec<String>,
+
     #[arg(long)]
     min_local_artifact_paths: Option<usize>,
 
@@ -561,6 +567,13 @@ impl JudgeSoundArgs {
                 "--require-source-identifier-field `{field}` must be one of: {}",
                 SOURCE_IDENTIFIER_FIELDS.join(", ")
             )
+        }
+        if self
+            .required_download_methods
+            .iter()
+            .any(|method| method.trim().is_empty())
+        {
+            bail!("--require-download-method values must not be empty")
         }
         if self
             .min_representative_engagement_metrics
@@ -661,6 +674,8 @@ impl JudgeSoundArgs {
             max_duration_seconds: self.max_duration_seconds,
             min_source_identifiers: self.min_source_identifiers,
             required_source_identifier_fields: self.required_source_identifier_fields.clone(),
+            require_resolver_actor_id: self.require_resolver_actor_id,
+            required_download_methods: self.required_download_methods.clone(),
             min_local_artifact_paths: self.min_local_artifact_paths,
             required_local_artifact_path_fields: self.required_local_artifact_path_fields.clone(),
             min_representative_views: self.min_representative_views,
@@ -713,6 +728,11 @@ impl JudgeSoundArgs {
             &mut sounds,
             self.min_source_identifiers,
             &self.required_source_identifier_fields,
+        );
+        filter_judged_sounds_by_repeatability_context(
+            &mut sounds,
+            self.require_resolver_actor_id,
+            &self.required_download_methods,
         );
         filter_judged_sounds_by_local_artifacts(
             &mut sounds,
@@ -1487,6 +1507,34 @@ fn filter_judged_sounds_by_source_identifiers(
     }
 }
 
+fn filter_judged_sounds_by_repeatability_context(
+    sounds: &mut Vec<JudgedSound>,
+    require_resolver_actor_id: bool,
+    required_download_methods: &[String],
+) {
+    if require_resolver_actor_id {
+        sounds.retain(|sound| {
+            sound
+                .resolver_actor_id
+                .as_deref()
+                .is_some_and(|actor_id| !actor_id.trim().is_empty())
+        });
+    }
+
+    if !required_download_methods.is_empty() {
+        sounds.retain(|sound| {
+            sound
+                .download_method
+                .as_deref()
+                .is_some_and(|download_method| {
+                    required_download_methods
+                        .iter()
+                        .any(|required| download_method.eq_ignore_ascii_case(required.trim()))
+                })
+        });
+    }
+}
+
 fn filter_judged_sounds_by_local_artifacts(
     sounds: &mut Vec<JudgedSound>,
     min_local_artifact_paths: Option<usize>,
@@ -2108,6 +2156,26 @@ mod tests {
         filter_judged_sounds_by_source_identifiers(&mut filtered, Some(5), &[]);
 
         assert_eq!(filtered.len(), 2);
+    }
+
+    #[test]
+    fn filter_judged_sounds_applies_repeatability_context_filters() {
+        let repeatable = judged_sound("sound_a", 95, "shortlist_after_rights_review");
+        let mut missing_resolver = judged_sound("sound_b", 95, "shortlist_after_rights_review");
+        missing_resolver.resolver_actor_id = None;
+        let mut other_download_method =
+            judged_sound("sound_c", 95, "shortlist_after_rights_review");
+        other_download_method.download_method = Some("manual_upload".to_string());
+
+        let mut filtered = vec![repeatable, missing_resolver, other_download_method];
+        filter_judged_sounds_by_repeatability_context(
+            &mut filtered,
+            true,
+            &["DIRECT_MEDIA_URL".to_string()],
+        );
+
+        assert_eq!(filtered.len(), 1);
+        assert_eq!(filtered[0].sound_id, "sound_a");
     }
 
     #[test]
