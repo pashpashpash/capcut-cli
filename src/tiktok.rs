@@ -798,6 +798,10 @@ fn judge_manifest_entry(manifest_path: &Path, entry: &ManifestEntry) -> Result<J
         title: entry.title.clone(),
         author: entry.author.clone(),
         platform: entry.platform.clone(),
+        provenance: entry.provenance.clone(),
+        rights_note: entry.rights_note.clone(),
+        resolver_actor_id: entry.resolver_actor_id.clone(),
+        download_method: entry.download_method.clone(),
         source_url: entry.source_url.clone(),
         source_video_url: entry.source_video_url.clone(),
         song_id: entry.song_id.clone(),
@@ -2043,6 +2047,10 @@ mod tests {
             title: id.to_string(),
             author: "creator".to_string(),
             platform: "tiktok".to_string(),
+            provenance: "test fixture".to_string(),
+            rights_note: "For research only. Verify rights before production use.".to_string(),
+            resolver_actor_id: Some("resolver".to_string()),
+            download_method: Some(DIRECT_DOWNLOAD_METHOD.to_string()),
             source_url: format!("https://www.tiktok.com/music/{id}"),
             source_video_url: Some(format!("https://www.tiktok.com/@creator/video/{id}")),
             song_id: Some(id.to_string()),
@@ -2174,6 +2182,16 @@ mod tests {
         assert_eq!(
             judged.source_url,
             "https://www.tiktok.com/music/example-123"
+        );
+        assert_eq!(judged.provenance, "Imported from Apify trending sounds");
+        assert_eq!(
+            judged.rights_note,
+            "For research only. Verify rights before production use."
+        );
+        assert_eq!(judged.resolver_actor_id, Some("resolver".to_string()));
+        assert_eq!(
+            judged.download_method,
+            Some(DIRECT_DOWNLOAD_METHOD.to_string())
         );
         assert_eq!(
             judged.source_video_url,
