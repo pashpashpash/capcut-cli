@@ -790,18 +790,17 @@ fn summarize_judged_sounds(sounds: &[JudgedSound]) -> SoundJudgementSummary {
         *duration_seconds_band_counts
             .entry(duration_seconds_band(sound.duration_seconds).to_string())
             .or_insert(0) += 1;
-        let source_identifier_fields = source_identifier_fields(sound);
         *source_identifier_coverage_counts
-            .entry(source_identifier_fields.len())
+            .entry(sound.source_identifier_count)
             .or_insert(0) += 1;
-        for field in source_identifier_fields {
+        for field in &sound.source_identifier_fields {
             *source_identifier_field_counts
-                .entry(field.to_string())
+                .entry(field.clone())
                 .or_insert(0) += 1;
         }
-        for field in missing_source_identifier_fields(sound) {
+        for field in &sound.missing_source_identifier_fields {
             *missing_source_identifier_field_counts
-                .entry(field.to_string())
+                .entry(field.clone())
                 .or_insert(0) += 1;
         }
         *reason_count_coverage_counts
@@ -1142,46 +1141,6 @@ fn duration_seconds_band(duration_seconds: Option<u32>) -> &'static str {
     }
 }
 
-fn source_identifier_fields(sound: &JudgedSound) -> Vec<&'static str> {
-    SOURCE_IDENTIFIER_FIELDS
-        .iter()
-        .copied()
-        .filter(|field| has_source_identifier_field(sound, field))
-        .collect()
-}
-
-fn missing_source_identifier_fields(sound: &JudgedSound) -> Vec<&'static str> {
-    SOURCE_IDENTIFIER_FIELDS
-        .iter()
-        .copied()
-        .filter(|field| !has_source_identifier_field(sound, field))
-        .collect()
-}
-
-fn has_source_identifier_field(sound: &JudgedSound, field: &str) -> bool {
-    match field {
-        "source_url" => !sound.source_url.trim().is_empty(),
-        "source_video_url" => sound
-            .source_video_url
-            .as_deref()
-            .is_some_and(|value| !value.trim().is_empty()),
-        "song_id" => sound
-            .song_id
-            .as_deref()
-            .is_some_and(|value| !value.trim().is_empty()),
-        "clip_id" => sound
-            .clip_id
-            .as_deref()
-            .is_some_and(|value| !value.trim().is_empty()),
-        "country_code" => sound
-            .country_code
-            .as_deref()
-            .is_some_and(|value| !value.trim().is_empty()),
-        "duration_seconds" => sound.duration_seconds.is_some(),
-        _ => false,
-    }
-}
-
 fn representative_view_count_band(view_count: Option<u64>) -> &'static str {
     match view_count {
         Some(10_000_000..) => "10000000_plus",
@@ -1510,7 +1469,7 @@ fn filter_judged_sounds_by_source_identifiers(
     required_source_identifier_fields: &[String],
 ) {
     if let Some(min_source_identifiers) = min_source_identifiers {
-        sounds.retain(|sound| source_identifier_fields(sound).len() >= min_source_identifiers);
+        sounds.retain(|sound| sound.source_identifier_count >= min_source_identifiers);
     }
 
     if !required_source_identifier_fields.is_empty() {
@@ -1518,7 +1477,12 @@ fn filter_judged_sounds_by_source_identifiers(
             required_source_identifier_fields
                 .iter()
                 .map(|field| field.trim())
-                .all(|required| has_source_identifier_field(sound, required))
+                .all(|required| {
+                    sound
+                        .source_identifier_fields
+                        .iter()
+                        .any(|field| field == required)
+                })
         });
     }
 }
@@ -1667,6 +1631,16 @@ mod tests {
             clip_id: Some(format!("{id}_clip")),
             country_code: Some("US".to_string()),
             duration_seconds: Some(12),
+            source_identifier_count: 6,
+            source_identifier_fields: vec![
+                "source_url".to_string(),
+                "source_video_url".to_string(),
+                "song_id".to_string(),
+                "clip_id".to_string(),
+                "country_code".to_string(),
+                "duration_seconds".to_string(),
+            ],
+            missing_source_identifier_fields: Vec::new(),
             local_audio_path: format!("library/sounds/imported/{id}/audio.mp3"),
             local_video_path: Some(format!("library/sounds/imported/{id}/video.mp4")),
             local_metadata_path: format!("library/sounds/imported/{id}/metadata.json"),
@@ -2084,6 +2058,16 @@ mod tests {
         let mut missing_video_identifier =
             judged_sound("sound_b", 95, "shortlist_after_rights_review");
         missing_video_identifier.source_video_url = None;
+        missing_video_identifier.source_identifier_count = 5;
+        missing_video_identifier.source_identifier_fields = vec![
+            "source_url".to_string(),
+            "song_id".to_string(),
+            "clip_id".to_string(),
+            "country_code".to_string(),
+            "duration_seconds".to_string(),
+        ];
+        missing_video_identifier.missing_source_identifier_fields =
+            vec!["source_video_url".to_string()];
         let mut sparse_identifiers = judged_sound("sound_c", 95, "shortlist_after_rights_review");
         sparse_identifiers.source_url = String::new();
         sparse_identifiers.source_video_url = None;
@@ -2091,6 +2075,16 @@ mod tests {
         sparse_identifiers.clip_id = None;
         sparse_identifiers.country_code = None;
         sparse_identifiers.duration_seconds = None;
+        sparse_identifiers.source_identifier_count = 0;
+        sparse_identifiers.source_identifier_fields = Vec::new();
+        sparse_identifiers.missing_source_identifier_fields = vec![
+            "source_url".to_string(),
+            "source_video_url".to_string(),
+            "song_id".to_string(),
+            "clip_id".to_string(),
+            "country_code".to_string(),
+            "duration_seconds".to_string(),
+        ];
 
         let mut filtered = vec![
             complete_identifiers.clone(),
@@ -2617,6 +2611,16 @@ mod tests {
         skip_for_now.clip_id = None;
         skip_for_now.country_code = None;
         skip_for_now.duration_seconds = None;
+        skip_for_now.source_identifier_count = 0;
+        skip_for_now.source_identifier_fields = Vec::new();
+        skip_for_now.missing_source_identifier_fields = vec![
+            "source_url".to_string(),
+            "source_video_url".to_string(),
+            "song_id".to_string(),
+            "clip_id".to_string(),
+            "country_code".to_string(),
+            "duration_seconds".to_string(),
+        ];
         skip_for_now.downloaded_video_count = None;
         skip_for_now.extracted_audio_count = None;
         skip_for_now.usable_asset_pair_count = None;

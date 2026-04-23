@@ -640,6 +640,47 @@ fn judge_manifest_entry(manifest_path: &Path, entry: &ManifestEntry) -> Result<J
         .filter_map(|(field, is_present)| (!is_present).then(|| (*field).to_string()))
         .collect::<Vec<_>>();
     let representative_engagement_metric_count = representative_engagement_metric_fields.len();
+    let source_identifiers = [
+        ("source_url", !entry.source_url.trim().is_empty()),
+        (
+            "source_video_url",
+            entry
+                .source_video_url
+                .as_deref()
+                .is_some_and(|value| !value.trim().is_empty()),
+        ),
+        (
+            "song_id",
+            entry
+                .song_id
+                .as_deref()
+                .is_some_and(|value| !value.trim().is_empty()),
+        ),
+        (
+            "clip_id",
+            entry
+                .clip_id
+                .as_deref()
+                .is_some_and(|value| !value.trim().is_empty()),
+        ),
+        (
+            "country_code",
+            entry
+                .country_code
+                .as_deref()
+                .is_some_and(|value| !value.trim().is_empty()),
+        ),
+        ("duration_seconds", entry.duration_seconds.is_some()),
+    ];
+    let source_identifier_fields = source_identifiers
+        .iter()
+        .filter_map(|(field, is_present)| is_present.then(|| (*field).to_string()))
+        .collect::<Vec<_>>();
+    let missing_source_identifier_fields = source_identifiers
+        .iter()
+        .filter_map(|(field, is_present)| (!is_present).then(|| (*field).to_string()))
+        .collect::<Vec<_>>();
+    let source_identifier_count = source_identifier_fields.len();
     let local_artifact_paths = [
         ("local_audio_path", Some(entry.local_audio_path.as_str())),
         ("local_video_path", entry.local_video_path.as_deref()),
@@ -763,6 +804,9 @@ fn judge_manifest_entry(manifest_path: &Path, entry: &ManifestEntry) -> Result<J
         clip_id: entry.clip_id.clone(),
         country_code: entry.country_code.clone(),
         duration_seconds: entry.duration_seconds,
+        source_identifier_count,
+        source_identifier_fields,
+        missing_source_identifier_fields,
         local_audio_path: entry.local_audio_path.clone(),
         local_video_path: entry.local_video_path.clone(),
         local_metadata_path: entry.local_metadata_path.clone(),
@@ -2005,6 +2049,16 @@ mod tests {
             clip_id: Some(format!("{id}_clip")),
             country_code: Some("US".to_string()),
             duration_seconds: Some(12),
+            source_identifier_count: 6,
+            source_identifier_fields: vec![
+                "source_url".to_string(),
+                "source_video_url".to_string(),
+                "song_id".to_string(),
+                "clip_id".to_string(),
+                "country_code".to_string(),
+                "duration_seconds".to_string(),
+            ],
+            missing_source_identifier_fields: Vec::new(),
             local_audio_path: format!("library/sounds/imported/{id}/audio.mp3"),
             local_video_path: Some(format!("library/sounds/imported/{id}/video.mp4")),
             local_metadata_path: format!("library/sounds/imported/{id}/metadata.json"),
@@ -2129,6 +2183,19 @@ mod tests {
         assert_eq!(judged.clip_id, Some("456".to_string()));
         assert_eq!(judged.country_code, Some("US".to_string()));
         assert_eq!(judged.duration_seconds, Some(12));
+        assert_eq!(judged.source_identifier_count, 6);
+        assert_eq!(
+            judged.source_identifier_fields,
+            vec![
+                "source_url".to_string(),
+                "source_video_url".to_string(),
+                "song_id".to_string(),
+                "clip_id".to_string(),
+                "country_code".to_string(),
+                "duration_seconds".to_string()
+            ]
+        );
+        assert!(judged.missing_source_identifier_fields.is_empty());
         assert_eq!(
             judged.local_audio_path,
             "library/sounds/imported/example/audio.mp3"
