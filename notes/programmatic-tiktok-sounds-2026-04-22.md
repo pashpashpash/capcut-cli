@@ -114,7 +114,7 @@ Implemented refinements:
 - returned sounds include source identifier coverage (`source_identifier_count`, `source_identifier_fields`, and `missing_source_identifier_fields`), so agents can see traceability completeness without comparing every nullable identifier by hand
 - returned sounds include manifest repeatability and rights context (`provenance`, `rights_note`, `resolver_actor_id`, and `download_method`), so agents can inspect source chain and production caveats without reopening the manifest
 - `--require-resolver-actor-id` and repeated `--require-download-method` filters let shortlists require repeatable resolver provenance and specific asset acquisition methods such as `direct_http`
-- repeated `--require-provenance` and `--exclude-rights-note` filters let shortlists require specific acquisition-chain evidence and drop manifest-level rights caveats before opening rows
+- repeated `--require-provenance`, `--exclude-provenance`, `--require-rights-note`, and `--exclude-rights-note` filters let shortlists require or drop specific source-chain and rights-note text before opening rows
 - judgement summaries now include resolver actor coverage and download method counts, so agents can see whether the library is repeatable/direct-download backed before opening individual rows
 - judgement summaries now include provenance coverage and rights-note counts, so agents can compare source-chain completeness and production caveats before opening individual rows
 - returned sounds include local artifact paths (`local_audio_path`, `local_video_path`, `local_metadata_path`, `local_trend_path`, `local_posts_path`, `local_selection_path`, and `local_download_path`), so follow-up editing and audit steps can jump straight to retained assets

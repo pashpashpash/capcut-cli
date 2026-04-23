@@ -484,6 +484,12 @@ struct JudgeSoundArgs {
     #[arg(long = "require-provenance")]
     required_provenance_terms: Vec<String>,
 
+    #[arg(long = "exclude-provenance")]
+    excluded_provenance_terms: Vec<String>,
+
+    #[arg(long = "require-rights-note")]
+    required_rights_notes: Vec<String>,
+
     #[arg(long = "exclude-rights-note")]
     excluded_rights_notes: Vec<String>,
 
@@ -588,6 +594,20 @@ impl JudgeSoundArgs {
             .any(|term| term.trim().is_empty())
         {
             bail!("--require-provenance values must not be empty")
+        }
+        if self
+            .excluded_provenance_terms
+            .iter()
+            .any(|term| term.trim().is_empty())
+        {
+            bail!("--exclude-provenance values must not be empty")
+        }
+        if self
+            .required_rights_notes
+            .iter()
+            .any(|note| note.trim().is_empty())
+        {
+            bail!("--require-rights-note values must not be empty")
         }
         if self
             .excluded_rights_notes
@@ -698,6 +718,8 @@ impl JudgeSoundArgs {
             require_resolver_actor_id: self.require_resolver_actor_id,
             required_download_methods: self.required_download_methods.clone(),
             required_provenance_terms: self.required_provenance_terms.clone(),
+            excluded_provenance_terms: self.excluded_provenance_terms.clone(),
+            required_rights_notes: self.required_rights_notes.clone(),
             excluded_rights_notes: self.excluded_rights_notes.clone(),
             min_local_artifact_paths: self.min_local_artifact_paths,
             required_local_artifact_path_fields: self.required_local_artifact_path_fields.clone(),
@@ -757,6 +779,8 @@ impl JudgeSoundArgs {
             self.require_resolver_actor_id,
             &self.required_download_methods,
             &self.required_provenance_terms,
+            &self.excluded_provenance_terms,
+            &self.required_rights_notes,
             &self.excluded_rights_notes,
         );
         filter_judged_sounds_by_local_artifacts(
@@ -1592,6 +1616,8 @@ fn filter_judged_sounds_by_repeatability_context(
     require_resolver_actor_id: bool,
     required_download_methods: &[String],
     required_provenance_terms: &[String],
+    excluded_provenance_terms: &[String],
+    required_rights_notes: &[String],
     excluded_rights_notes: &[String],
 ) {
     if require_resolver_actor_id {
@@ -1619,6 +1645,18 @@ fn filter_judged_sounds_by_repeatability_context(
     if !required_provenance_terms.is_empty() {
         sounds.retain(|sound| {
             text_contains_all_required_terms(&sound.provenance, required_provenance_terms)
+        });
+    }
+
+    if !excluded_provenance_terms.is_empty() {
+        sounds.retain(|sound| {
+            !text_matches_any_excluded_term(&sound.provenance, excluded_provenance_terms)
+        });
+    }
+
+    if !required_rights_notes.is_empty() {
+        sounds.retain(|sound| {
+            text_contains_all_required_terms(&sound.rights_note, required_rights_notes)
         });
     }
 
@@ -2279,6 +2317,8 @@ mod tests {
             &["DIRECT_MEDIA_URL".to_string()],
             &[],
             &[],
+            &[],
+            &[],
         );
 
         assert_eq!(filtered.len(), 1);
@@ -2298,13 +2338,24 @@ mod tests {
         blocked_rights.provenance =
             "Imported from TikTok, resolved by actor, and downloaded directly".to_string();
         blocked_rights.rights_note = "No production license is recorded".to_string();
+        let mut manual_fallback = judged_sound("sound_d", 95, "shortlist_after_rights_review");
+        manual_fallback.provenance =
+            "Imported from TikTok, downloaded directly, then repaired by manual fallback"
+                .to_string();
 
-        let mut filtered = vec![direct_download, missing_provenance, blocked_rights];
+        let mut filtered = vec![
+            direct_download,
+            missing_provenance,
+            blocked_rights,
+            manual_fallback,
+        ];
         filter_judged_sounds_by_repeatability_context(
             &mut filtered,
             false,
             &[],
             &["DOWNLOADED DIRECTLY".to_string()],
+            &["manual fallback".to_string()],
+            &["verify RIGHTS".to_string()],
             &["no production license".to_string()],
         );
 
