@@ -207,6 +207,8 @@ pub struct SoundJudgementSummary {
     pub source_identifier_field_counts: Vec<SourceIdentifierFieldCount>,
     pub resolver_actor_id_coverage_counts: Vec<ResolverActorIdCoverageCount>,
     pub download_method_counts: Vec<DownloadMethodCount>,
+    pub provenance_coverage_counts: Vec<ProvenanceCoverageCount>,
+    pub rights_note_counts: Vec<RightsNoteCount>,
     pub reason_count_coverage_counts: Vec<ReasonCountCoverageCount>,
     pub risk_count_coverage_counts: Vec<RiskCountCoverageCount>,
     pub downloaded_video_coverage_counts: Vec<DownloadedVideoCoverageCount>,
@@ -291,6 +293,18 @@ pub struct ResolverActorIdCoverageCount {
 #[derive(Debug, Serialize)]
 pub struct DownloadMethodCount {
     pub download_method: Option<String>,
+    pub count: usize,
+}
+
+#[derive(Debug, Serialize)]
+pub struct ProvenanceCoverageCount {
+    pub provenance_present: bool,
+    pub count: usize,
+}
+
+#[derive(Debug, Serialize)]
+pub struct RightsNoteCount {
+    pub rights_note: String,
     pub count: usize,
 }
 

@@ -116,6 +116,7 @@ Implemented refinements:
 - `--require-resolver-actor-id` and repeated `--require-download-method` filters let shortlists require repeatable resolver provenance and specific asset acquisition methods such as `direct_http`
 - repeated `--require-provenance` and `--exclude-rights-note` filters let shortlists require specific acquisition-chain evidence and drop manifest-level rights caveats before opening rows
 - judgement summaries now include resolver actor coverage and download method counts, so agents can see whether the library is repeatable/direct-download backed before opening individual rows
+- judgement summaries now include provenance coverage and rights-note counts, so agents can compare source-chain completeness and production caveats before opening individual rows
 - returned sounds include local artifact paths (`local_audio_path`, `local_video_path`, `local_metadata_path`, `local_trend_path`, `local_posts_path`, `local_selection_path`, and `local_download_path`), so follow-up editing and audit steps can jump straight to retained assets
 - returned sounds include local artifact path coverage (`local_artifact_path_count`, `local_artifact_path_fields`, and `missing_local_artifact_path_fields`), so agents can tell which retained audit/editing files are recorded without comparing every nullable path
 - judgement summaries now include `local_artifact_path_coverage_counts` and `missing_local_artifact_path_field_counts`, so agents can compare retained audit/editing file coverage before opening individual rows

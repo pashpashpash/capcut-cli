@@ -14,13 +14,13 @@ use crate::{
         JudgementRankBandCount, LibraryReport, LocalArtifactPathCoverageCount,
         LocalArtifactPathFieldCount, MediaReport, MissingEngagementMetricFieldCount,
         MissingLocalArtifactPathFieldCount, MissingSourceIdentifierFieldCount, PipelineStep,
-        PipelineStepKind, PlatformCount, ReasonCount, ReasonCountCoverageCount,
-        RecommendedActionCount, RepresentativeCommentCountBandCount,
+        PipelineStepKind, PlatformCount, ProvenanceCoverageCount, ReasonCount,
+        ReasonCountCoverageCount, RecommendedActionCount, RepresentativeCommentCountBandCount,
         RepresentativeCommentRateBandCount, RepresentativeEngagementCountBandCount,
         RepresentativeEngagementMetricFieldCount, RepresentativeEngagementRateBandCount,
         RepresentativeLikeCountBandCount, RepresentativeLikeRateBandCount,
         RepresentativeShareCountBandCount, RepresentativeShareRateBandCount,
-        RepresentativeViewCountBandCount, ResolverActorIdCoverageCount, RiskCount,
+        RepresentativeViewCountBandCount, ResolverActorIdCoverageCount, RightsNoteCount, RiskCount,
         RiskCountCoverageCount, ScoreBandCount, SoundImportReport, SoundJudgementFilters,
         SoundJudgementReport, SoundJudgementSummary, SourceIdentifierCoverageCount,
         SourceIdentifierFieldCount, TrendRankBandCount, UpdateReport, UsableAssetPairCoverageCount,
@@ -795,6 +795,8 @@ fn summarize_judged_sounds(sounds: &[JudgedSound]) -> SoundJudgementSummary {
     let mut source_identifier_field_counts = BTreeMap::new();
     let mut resolver_actor_id_coverage_counts = BTreeMap::new();
     let mut download_method_counts = BTreeMap::new();
+    let mut provenance_coverage_counts = BTreeMap::new();
+    let mut rights_note_counts = BTreeMap::new();
     let mut reason_count_coverage_counts = BTreeMap::new();
     let mut risk_count_coverage_counts = BTreeMap::new();
     let mut downloaded_video_coverage_counts = BTreeMap::new();
@@ -867,6 +869,12 @@ fn summarize_judged_sounds(sounds: &[JudgedSound]) -> SoundJudgementSummary {
                     .filter(|download_method| !download_method.is_empty())
                     .map(|download_method| download_method.to_string()),
             )
+            .or_insert(0) += 1;
+        *provenance_coverage_counts
+            .entry(!sound.provenance.trim().is_empty())
+            .or_insert(0) += 1;
+        *rights_note_counts
+            .entry(sound.rights_note.trim().to_string())
             .or_insert(0) += 1;
         *reason_count_coverage_counts
             .entry(sound.reasons.len())
@@ -1021,6 +1029,17 @@ fn summarize_judged_sounds(sounds: &[JudgedSound]) -> SoundJudgementSummary {
                 download_method,
                 count,
             })
+            .collect(),
+        provenance_coverage_counts: provenance_coverage_counts
+            .into_iter()
+            .map(|(provenance_present, count)| ProvenanceCoverageCount {
+                provenance_present,
+                count,
+            })
+            .collect(),
+        rights_note_counts: rights_note_counts
+            .into_iter()
+            .map(|(rights_note, count)| RightsNoteCount { rights_note, count })
             .collect(),
         reason_count_coverage_counts: reason_count_coverage_counts
             .into_iter()
@@ -2798,6 +2817,8 @@ mod tests {
         skip_for_now.clip_id = None;
         skip_for_now.country_code = None;
         skip_for_now.duration_seconds = None;
+        skip_for_now.provenance = String::new();
+        skip_for_now.rights_note = "No production license is recorded".to_string();
         skip_for_now.resolver_actor_id = None;
         skip_for_now.download_method = None;
         skip_for_now.source_identifier_count = 0;
@@ -3006,6 +3027,25 @@ mod tests {
                 .iter()
                 .any(|count| { count.download_method.is_none() && count.count == 1 })
         );
+        assert!(
+            summary
+                .provenance_coverage_counts
+                .iter()
+                .any(|count| { count.provenance_present && count.count == 4 })
+        );
+        assert!(
+            summary
+                .provenance_coverage_counts
+                .iter()
+                .any(|count| { !count.provenance_present && count.count == 1 })
+        );
+        assert!(summary.rights_note_counts.iter().any(|count| {
+            count.rights_note == "For research only. Verify rights before production use."
+                && count.count == 4
+        }));
+        assert!(summary.rights_note_counts.iter().any(|count| {
+            count.rights_note == "No production license is recorded" && count.count == 1
+        }));
         assert!(
             summary
                 .reason_count_coverage_counts
