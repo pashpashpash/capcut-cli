@@ -481,6 +481,12 @@ struct JudgeSoundArgs {
     #[arg(long = "require-download-method")]
     required_download_methods: Vec<String>,
 
+    #[arg(long = "require-provenance")]
+    required_provenance_terms: Vec<String>,
+
+    #[arg(long = "exclude-rights-note")]
+    excluded_rights_notes: Vec<String>,
+
     #[arg(long)]
     min_local_artifact_paths: Option<usize>,
 
@@ -575,6 +581,20 @@ impl JudgeSoundArgs {
             .any(|method| method.trim().is_empty())
         {
             bail!("--require-download-method values must not be empty")
+        }
+        if self
+            .required_provenance_terms
+            .iter()
+            .any(|term| term.trim().is_empty())
+        {
+            bail!("--require-provenance values must not be empty")
+        }
+        if self
+            .excluded_rights_notes
+            .iter()
+            .any(|note| note.trim().is_empty())
+        {
+            bail!("--exclude-rights-note values must not be empty")
         }
         if self
             .min_representative_engagement_metrics
@@ -677,6 +697,8 @@ impl JudgeSoundArgs {
             required_source_identifier_fields: self.required_source_identifier_fields.clone(),
             require_resolver_actor_id: self.require_resolver_actor_id,
             required_download_methods: self.required_download_methods.clone(),
+            required_provenance_terms: self.required_provenance_terms.clone(),
+            excluded_rights_notes: self.excluded_rights_notes.clone(),
             min_local_artifact_paths: self.min_local_artifact_paths,
             required_local_artifact_path_fields: self.required_local_artifact_path_fields.clone(),
             min_representative_views: self.min_representative_views,
@@ -734,6 +756,8 @@ impl JudgeSoundArgs {
             &mut sounds,
             self.require_resolver_actor_id,
             &self.required_download_methods,
+            &self.required_provenance_terms,
+            &self.excluded_rights_notes,
         );
         filter_judged_sounds_by_local_artifacts(
             &mut sounds,
@@ -1548,6 +1572,8 @@ fn filter_judged_sounds_by_repeatability_context(
     sounds: &mut Vec<JudgedSound>,
     require_resolver_actor_id: bool,
     required_download_methods: &[String],
+    required_provenance_terms: &[String],
+    excluded_rights_notes: &[String],
 ) {
     if require_resolver_actor_id {
         sounds.retain(|sound| {
@@ -1568,6 +1594,18 @@ fn filter_judged_sounds_by_repeatability_context(
                         .iter()
                         .any(|required| download_method.eq_ignore_ascii_case(required.trim()))
                 })
+        });
+    }
+
+    if !required_provenance_terms.is_empty() {
+        sounds.retain(|sound| {
+            text_contains_all_required_terms(&sound.provenance, required_provenance_terms)
+        });
+    }
+
+    if !excluded_rights_notes.is_empty() {
+        sounds.retain(|sound| {
+            !text_matches_any_excluded_term(&sound.rights_note, excluded_rights_notes)
         });
     }
 }
@@ -1606,10 +1644,21 @@ fn matches_all_required_reasons(reasons: &[String], required_reasons: &[String])
 }
 
 fn matches_any_excluded_risk(risk: &str, excluded_risks: &[String]) -> bool {
-    let risk = risk.to_ascii_lowercase();
-    excluded_risks
+    text_matches_any_excluded_term(risk, excluded_risks)
+}
+
+fn text_contains_all_required_terms(text: &str, required_terms: &[String]) -> bool {
+    let text = text.to_ascii_lowercase();
+    required_terms
         .iter()
-        .any(|excluded| risk.contains(&excluded.trim().to_ascii_lowercase()))
+        .all(|required| text.contains(&required.trim().to_ascii_lowercase()))
+}
+
+fn text_matches_any_excluded_term(text: &str, excluded_terms: &[String]) -> bool {
+    let text = text.to_ascii_lowercase();
+    excluded_terms
+        .iter()
+        .any(|excluded| text.contains(&excluded.trim().to_ascii_lowercase()))
 }
 
 fn is_representative_engagement_metric_field(field: &str) -> bool {
@@ -2209,6 +2258,35 @@ mod tests {
             &mut filtered,
             true,
             &["DIRECT_MEDIA_URL".to_string()],
+            &[],
+            &[],
+        );
+
+        assert_eq!(filtered.len(), 1);
+        assert_eq!(filtered[0].sound_id, "sound_a");
+    }
+
+    #[test]
+    fn filter_judged_sounds_applies_manifest_context_text_filters() {
+        let mut direct_download = judged_sound("sound_a", 95, "shortlist_after_rights_review");
+        direct_download.provenance =
+            "Imported from TikTok, resolved by actor, and downloaded directly".to_string();
+        direct_download.rights_note =
+            "For research only. Verify rights before production use.".to_string();
+        let mut missing_provenance = judged_sound("sound_b", 95, "shortlist_after_rights_review");
+        missing_provenance.provenance = "Imported manually".to_string();
+        let mut blocked_rights = judged_sound("sound_c", 95, "shortlist_after_rights_review");
+        blocked_rights.provenance =
+            "Imported from TikTok, resolved by actor, and downloaded directly".to_string();
+        blocked_rights.rights_note = "No production license is recorded".to_string();
+
+        let mut filtered = vec![direct_download, missing_provenance, blocked_rights];
+        filter_judged_sounds_by_repeatability_context(
+            &mut filtered,
+            false,
+            &[],
+            &["DOWNLOADED DIRECTLY".to_string()],
+            &["no production license".to_string()],
         );
 
         assert_eq!(filtered.len(), 1);

@@ -178,6 +178,8 @@ pub struct SoundJudgementFilters {
     pub required_source_identifier_fields: Vec<String>,
     pub require_resolver_actor_id: bool,
     pub required_download_methods: Vec<String>,
+    pub required_provenance_terms: Vec<String>,
+    pub excluded_rights_notes: Vec<String>,
     pub min_local_artifact_paths: Option<usize>,
     pub required_local_artifact_path_fields: Vec<String>,
     pub min_representative_views: Option<u64>,
