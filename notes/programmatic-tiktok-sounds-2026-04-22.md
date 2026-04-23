@@ -112,6 +112,7 @@ Implemented refinements:
 - `--max-judgement-rank` keeps filtered passes inside the full-library top N by score, trend rank, and sound id, so narrow filters do not accidentally surface low-ranked candidates
 - returned sounds include source URLs and TikTok identifiers (`source_url`, `source_video_url`, `song_id`, `clip_id`, `country_code`, and `duration_seconds`), so shortlisted rows remain traceable without reopening the manifest
 - returned sounds include source identifier coverage (`source_identifier_count`, `source_identifier_fields`, and `missing_source_identifier_fields`), so agents can see traceability completeness without comparing every nullable identifier by hand
+- judgement summaries now include `country_code_counts`, and repeated `--country-code` filters let shortlists focus on one or more trend markets before comparing cross-country viral persistence
 - returned sounds include manifest repeatability and rights context (`provenance`, `rights_note`, `resolver_actor_id`, and `download_method`), so agents can inspect source chain and production caveats without reopening the manifest
 - `--require-resolver-actor-id` and repeated `--require-download-method` filters let shortlists require repeatable resolver provenance and specific asset acquisition methods such as `direct_http`
 - repeated `--require-provenance`, `--exclude-provenance`, `--require-rights-note`, and `--exclude-rights-note` filters let shortlists require or drop specific source-chain and rights-note text before opening rows

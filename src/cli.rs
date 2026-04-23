@@ -8,10 +8,10 @@ use crate::{
     apify,
     config::{self, APIFY_CONFIG_ENV, TIKTOK_SOUND_RESOLVER_ACTOR_ID_ENV},
     models::{
-        AppReport, AuthReport, CandidatePostCoverageCount, DiscoverSource, DiscoveryReport,
-        DownloadMethodCount, DownloadedVideoCoverageCount, DurationSecondsBandCount,
-        EngagementMetricCoverageCount, ExtractedAudioCoverageCount, JudgedSound,
-        JudgementRankBandCount, LibraryReport, LocalArtifactPathCoverageCount,
+        AppReport, AuthReport, CandidatePostCoverageCount, CountryCodeCount, DiscoverSource,
+        DiscoveryReport, DownloadMethodCount, DownloadedVideoCoverageCount,
+        DurationSecondsBandCount, EngagementMetricCoverageCount, ExtractedAudioCoverageCount,
+        JudgedSound, JudgementRankBandCount, LibraryReport, LocalArtifactPathCoverageCount,
         LocalArtifactPathFieldCount, MediaReport, MissingEngagementMetricFieldCount,
         MissingLocalArtifactPathFieldCount, MissingSourceIdentifierFieldCount, PipelineStep,
         PipelineStepKind, PlatformCount, ProvenanceCoverageCount, ReasonCount,
@@ -436,6 +436,9 @@ struct JudgeSoundArgs {
     #[arg(long = "platform")]
     platforms: Vec<String>,
 
+    #[arg(long = "country-code")]
+    country_codes: Vec<String>,
+
     #[arg(long = "require-reason")]
     required_reasons: Vec<String>,
 
@@ -672,6 +675,13 @@ impl JudgeSoundArgs {
             bail!("--platform values must not be empty")
         }
         if self
+            .country_codes
+            .iter()
+            .any(|country_code| country_code.trim().is_empty())
+        {
+            bail!("--country-code values must not be empty")
+        }
+        if self
             .required_reasons
             .iter()
             .any(|reason| reason.trim().is_empty())
@@ -702,6 +712,7 @@ impl JudgeSoundArgs {
             max_trend_rank: self.max_trend_rank,
             max_judgement_rank: self.max_judgement_rank,
             platforms: self.platforms.clone(),
+            country_codes: self.country_codes.clone(),
             required_reasons: self.required_reasons.clone(),
             recommended_actions: self.recommended_actions.clone(),
             excluded_risks: self.excluded_risks.clone(),
@@ -769,6 +780,7 @@ impl JudgeSoundArgs {
             &self.required_engagement_metric_fields,
             None,
         );
+        filter_judged_sounds_by_country_codes(&mut sounds, &self.country_codes);
         filter_judged_sounds_by_source_identifiers(
             &mut sounds,
             self.min_source_identifiers,
@@ -811,6 +823,7 @@ impl JudgeSoundArgs {
 fn summarize_judged_sounds(sounds: &[JudgedSound]) -> SoundJudgementSummary {
     let mut recommended_action_counts = BTreeMap::new();
     let mut platform_counts = BTreeMap::new();
+    let mut country_code_counts = BTreeMap::new();
     let mut score_band_counts = BTreeMap::new();
     let mut trend_rank_band_counts = BTreeMap::new();
     let mut judgement_rank_band_counts = BTreeMap::new();
@@ -851,6 +864,16 @@ fn summarize_judged_sounds(sounds: &[JudgedSound]) -> SoundJudgementSummary {
             .entry(sound.recommended_action.clone())
             .or_insert(0) += 1;
         *platform_counts.entry(sound.platform.clone()).or_insert(0) += 1;
+        *country_code_counts
+            .entry(
+                sound
+                    .country_code
+                    .as_deref()
+                    .map(|country_code| country_code.trim())
+                    .filter(|country_code| !country_code.is_empty())
+                    .map(|country_code| country_code.to_ascii_uppercase()),
+            )
+            .or_insert(0) += 1;
         *score_band_counts
             .entry(score_band(sound.score).to_string())
             .or_insert(0) += 1;
@@ -1008,6 +1031,13 @@ fn summarize_judged_sounds(sounds: &[JudgedSound]) -> SoundJudgementSummary {
         platform_counts: platform_counts
             .into_iter()
             .map(|(platform, count)| PlatformCount { platform, count })
+            .collect(),
+        country_code_counts: country_code_counts
+            .into_iter()
+            .map(|(country_code, count)| CountryCodeCount {
+                country_code,
+                count,
+            })
             .collect(),
         score_band_counts: score_band_counts
             .into_iter()
@@ -1611,6 +1641,21 @@ fn filter_judged_sounds_by_source_identifiers(
     }
 }
 
+fn filter_judged_sounds_by_country_codes(sounds: &mut Vec<JudgedSound>, country_codes: &[String]) {
+    if country_codes.is_empty() {
+        return;
+    }
+
+    sounds.retain(|sound| {
+        sound.country_code.as_deref().is_some_and(|country_code| {
+            country_codes
+                .iter()
+                .map(|country_code| country_code.trim())
+                .any(|required| country_code.eq_ignore_ascii_case(required))
+        })
+    });
+}
+
 fn filter_judged_sounds_by_repeatability_context(
     sounds: &mut Vec<JudgedSound>,
     require_resolver_actor_id: bool,
@@ -2048,6 +2093,21 @@ mod tests {
 
         assert_eq!(filtered.len(), 1);
         assert_eq!(filtered[0].sound_id, "sound_a");
+    }
+
+    #[test]
+    fn filter_judged_sounds_applies_country_code_filter() {
+        let us_sound = judged_sound("sound_a", 95, "shortlist_after_rights_review");
+        let mut gb_sound = judged_sound("sound_b", 95, "shortlist_after_rights_review");
+        gb_sound.country_code = Some("GB".to_string());
+        let mut missing_country = judged_sound("sound_c", 95, "shortlist_after_rights_review");
+        missing_country.country_code = None;
+
+        let mut filtered = vec![us_sound, gb_sound, missing_country];
+        filter_judged_sounds_by_country_codes(&mut filtered, &["gb".to_string()]);
+
+        assert_eq!(filtered.len(), 1);
+        assert_eq!(filtered[0].sound_id, "sound_b");
     }
 
     #[test]
@@ -2918,6 +2978,18 @@ mod tests {
                 .platform_counts
                 .iter()
                 .any(|count| { count.platform == "tiktok" && count.count == 5 })
+        );
+        assert!(
+            summary
+                .country_code_counts
+                .iter()
+                .any(|count| { count.country_code.as_deref() == Some("US") && count.count == 4 })
+        );
+        assert!(
+            summary
+                .country_code_counts
+                .iter()
+                .any(|count| { count.country_code.is_none() && count.count == 1 })
         );
         assert!(
             summary
