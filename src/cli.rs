@@ -9,17 +9,18 @@ use crate::{
     config::{self, APIFY_CONFIG_ENV, TIKTOK_SOUND_RESOLVER_ACTOR_ID_ENV},
     models::{
         AppReport, AuthReport, CandidatePostCoverageCount, DiscoverSource, DiscoveryReport,
-        DownloadedVideoCoverageCount, DurationSecondsBandCount, EngagementMetricCoverageCount,
-        ExtractedAudioCoverageCount, JudgedSound, JudgementRankBandCount, LibraryReport,
-        LocalArtifactPathCoverageCount, LocalArtifactPathFieldCount, MediaReport,
-        MissingEngagementMetricFieldCount, MissingLocalArtifactPathFieldCount,
-        MissingSourceIdentifierFieldCount, PipelineStep, PipelineStepKind, PlatformCount,
-        ReasonCount, ReasonCountCoverageCount, RecommendedActionCount,
-        RepresentativeCommentCountBandCount, RepresentativeCommentRateBandCount,
-        RepresentativeEngagementCountBandCount, RepresentativeEngagementMetricFieldCount,
-        RepresentativeEngagementRateBandCount, RepresentativeLikeCountBandCount,
-        RepresentativeLikeRateBandCount, RepresentativeShareCountBandCount,
-        RepresentativeShareRateBandCount, RepresentativeViewCountBandCount, RiskCount,
+        DownloadMethodCount, DownloadedVideoCoverageCount, DurationSecondsBandCount,
+        EngagementMetricCoverageCount, ExtractedAudioCoverageCount, JudgedSound,
+        JudgementRankBandCount, LibraryReport, LocalArtifactPathCoverageCount,
+        LocalArtifactPathFieldCount, MediaReport, MissingEngagementMetricFieldCount,
+        MissingLocalArtifactPathFieldCount, MissingSourceIdentifierFieldCount, PipelineStep,
+        PipelineStepKind, PlatformCount, ReasonCount, ReasonCountCoverageCount,
+        RecommendedActionCount, RepresentativeCommentCountBandCount,
+        RepresentativeCommentRateBandCount, RepresentativeEngagementCountBandCount,
+        RepresentativeEngagementMetricFieldCount, RepresentativeEngagementRateBandCount,
+        RepresentativeLikeCountBandCount, RepresentativeLikeRateBandCount,
+        RepresentativeShareCountBandCount, RepresentativeShareRateBandCount,
+        RepresentativeViewCountBandCount, ResolverActorIdCoverageCount, RiskCount,
         RiskCountCoverageCount, ScoreBandCount, SoundImportReport, SoundJudgementFilters,
         SoundJudgementReport, SoundJudgementSummary, SourceIdentifierCoverageCount,
         SourceIdentifierFieldCount, TrendRankBandCount, UpdateReport, UsableAssetPairCoverageCount,
@@ -768,6 +769,8 @@ fn summarize_judged_sounds(sounds: &[JudgedSound]) -> SoundJudgementSummary {
     let mut duration_seconds_band_counts = BTreeMap::new();
     let mut source_identifier_coverage_counts = BTreeMap::new();
     let mut source_identifier_field_counts = BTreeMap::new();
+    let mut resolver_actor_id_coverage_counts = BTreeMap::new();
+    let mut download_method_counts = BTreeMap::new();
     let mut reason_count_coverage_counts = BTreeMap::new();
     let mut risk_count_coverage_counts = BTreeMap::new();
     let mut downloaded_video_coverage_counts = BTreeMap::new();
@@ -823,6 +826,24 @@ fn summarize_judged_sounds(sounds: &[JudgedSound]) -> SoundJudgementSummary {
                 .entry(field.clone())
                 .or_insert(0) += 1;
         }
+        *resolver_actor_id_coverage_counts
+            .entry(
+                sound
+                    .resolver_actor_id
+                    .as_deref()
+                    .is_some_and(|resolver_actor_id| !resolver_actor_id.trim().is_empty()),
+            )
+            .or_insert(0) += 1;
+        *download_method_counts
+            .entry(
+                sound
+                    .download_method
+                    .as_deref()
+                    .map(|download_method| download_method.trim())
+                    .filter(|download_method| !download_method.is_empty())
+                    .map(|download_method| download_method.to_string()),
+            )
+            .or_insert(0) += 1;
         *reason_count_coverage_counts
             .entry(sound.reasons.len())
             .or_insert(0) += 1;
@@ -960,6 +981,22 @@ fn summarize_judged_sounds(sounds: &[JudgedSound]) -> SoundJudgementSummary {
         source_identifier_field_counts: source_identifier_field_counts
             .into_iter()
             .map(|(field, count)| SourceIdentifierFieldCount { field, count })
+            .collect(),
+        resolver_actor_id_coverage_counts: resolver_actor_id_coverage_counts
+            .into_iter()
+            .map(
+                |(resolver_actor_id_present, count)| ResolverActorIdCoverageCount {
+                    resolver_actor_id_present,
+                    count,
+                },
+            )
+            .collect(),
+        download_method_counts: download_method_counts
+            .into_iter()
+            .map(|(download_method, count)| DownloadMethodCount {
+                download_method,
+                count,
+            })
             .collect(),
         reason_count_coverage_counts: reason_count_coverage_counts
             .into_iter()
@@ -2683,6 +2720,8 @@ mod tests {
         skip_for_now.clip_id = None;
         skip_for_now.country_code = None;
         skip_for_now.duration_seconds = None;
+        skip_for_now.resolver_actor_id = None;
+        skip_for_now.download_method = None;
         skip_for_now.source_identifier_count = 0;
         skip_for_now.source_identifier_fields = Vec::new();
         skip_for_now.missing_source_identifier_fields = vec![
@@ -2867,6 +2906,27 @@ mod tests {
                 .missing_source_identifier_field_counts
                 .iter()
                 .any(|count| { count.field == "duration_seconds" && count.count == 1 })
+        );
+        assert!(
+            summary
+                .resolver_actor_id_coverage_counts
+                .iter()
+                .any(|count| { count.resolver_actor_id_present && count.count == 4 })
+        );
+        assert!(
+            summary
+                .resolver_actor_id_coverage_counts
+                .iter()
+                .any(|count| { !count.resolver_actor_id_present && count.count == 1 })
+        );
+        assert!(summary.download_method_counts.iter().any(|count| {
+            count.download_method.as_deref() == Some("direct_media_url") && count.count == 4
+        }));
+        assert!(
+            summary
+                .download_method_counts
+                .iter()
+                .any(|count| { count.download_method.is_none() && count.count == 1 })
         );
         assert!(
             summary
