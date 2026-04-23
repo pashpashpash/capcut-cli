@@ -469,6 +469,12 @@ struct JudgeSoundArgs {
     max_duration_seconds: Option<u32>,
 
     #[arg(long)]
+    min_source_identifiers: Option<usize>,
+
+    #[arg(long = "require-source-identifier-field")]
+    required_source_identifier_fields: Vec<String>,
+
+    #[arg(long)]
     min_local_artifact_paths: Option<usize>,
 
     #[arg(long = "require-local-artifact-path-field")]
@@ -531,6 +537,30 @@ impl JudgeSoundArgs {
             if min_duration_seconds > max_duration_seconds {
                 bail!("--min-duration-seconds must be less than or equal to --max-duration-seconds")
             }
+        }
+        if self
+            .min_source_identifiers
+            .is_some_and(|count| count > SOURCE_IDENTIFIER_FIELDS.len())
+        {
+            bail!("--min-source-identifiers must be between 0 and 6")
+        }
+        if self
+            .required_source_identifier_fields
+            .iter()
+            .any(|field| field.trim().is_empty())
+        {
+            bail!("--require-source-identifier-field values must not be empty")
+        }
+        if let Some(field) = self
+            .required_source_identifier_fields
+            .iter()
+            .map(|field| field.trim())
+            .find(|field| !is_source_identifier_field(field))
+        {
+            bail!(
+                "--require-source-identifier-field `{field}` must be one of: {}",
+                SOURCE_IDENTIFIER_FIELDS.join(", ")
+            )
         }
         if self
             .min_representative_engagement_metrics
@@ -629,6 +659,8 @@ impl JudgeSoundArgs {
             min_candidate_posts: self.min_candidate_posts,
             min_duration_seconds: self.min_duration_seconds,
             max_duration_seconds: self.max_duration_seconds,
+            min_source_identifiers: self.min_source_identifiers,
+            required_source_identifier_fields: self.required_source_identifier_fields.clone(),
             min_local_artifact_paths: self.min_local_artifact_paths,
             required_local_artifact_path_fields: self.required_local_artifact_path_fields.clone(),
             min_representative_views: self.min_representative_views,
@@ -676,6 +708,11 @@ impl JudgeSoundArgs {
             self.min_representative_engagement_metrics,
             &self.required_engagement_metric_fields,
             None,
+        );
+        filter_judged_sounds_by_source_identifiers(
+            &mut sounds,
+            self.min_source_identifiers,
+            &self.required_source_identifier_fields,
         );
         filter_judged_sounds_by_local_artifacts(
             &mut sounds,
@@ -1467,6 +1504,25 @@ fn filter_judged_sounds(
     sounds
 }
 
+fn filter_judged_sounds_by_source_identifiers(
+    sounds: &mut Vec<JudgedSound>,
+    min_source_identifiers: Option<usize>,
+    required_source_identifier_fields: &[String],
+) {
+    if let Some(min_source_identifiers) = min_source_identifiers {
+        sounds.retain(|sound| source_identifier_fields(sound).len() >= min_source_identifiers);
+    }
+
+    if !required_source_identifier_fields.is_empty() {
+        sounds.retain(|sound| {
+            required_source_identifier_fields
+                .iter()
+                .map(|field| field.trim())
+                .all(|required| has_source_identifier_field(sound, required))
+        });
+    }
+}
+
 fn filter_judged_sounds_by_local_artifacts(
     sounds: &mut Vec<JudgedSound>,
     min_local_artifact_paths: Option<usize>,
@@ -1509,6 +1565,10 @@ fn matches_any_excluded_risk(risk: &str, excluded_risks: &[String]) -> bool {
 
 fn is_representative_engagement_metric_field(field: &str) -> bool {
     REPRESENTATIVE_ENGAGEMENT_METRIC_FIELDS.contains(&field)
+}
+
+fn is_source_identifier_field(field: &str) -> bool {
+    SOURCE_IDENTIFIER_FIELDS.contains(&field)
 }
 
 fn is_local_artifact_path_field(field: &str) -> bool {
@@ -2016,6 +2076,40 @@ mod tests {
 
         assert_eq!(filtered.len(), 1);
         assert_eq!(filtered[0].sound_id, "sound_a");
+    }
+
+    #[test]
+    fn filter_judged_sounds_applies_source_identifier_filters() {
+        let complete_identifiers = judged_sound("sound_a", 95, "shortlist_after_rights_review");
+        let mut missing_video_identifier =
+            judged_sound("sound_b", 95, "shortlist_after_rights_review");
+        missing_video_identifier.source_video_url = None;
+        let mut sparse_identifiers = judged_sound("sound_c", 95, "shortlist_after_rights_review");
+        sparse_identifiers.source_url = String::new();
+        sparse_identifiers.source_video_url = None;
+        sparse_identifiers.song_id = None;
+        sparse_identifiers.clip_id = None;
+        sparse_identifiers.country_code = None;
+        sparse_identifiers.duration_seconds = None;
+
+        let mut filtered = vec![
+            complete_identifiers.clone(),
+            missing_video_identifier.clone(),
+            sparse_identifiers,
+        ];
+        filter_judged_sounds_by_source_identifiers(
+            &mut filtered,
+            Some(5),
+            &["source_video_url".to_string(), "song_id".to_string()],
+        );
+
+        assert_eq!(filtered.len(), 1);
+        assert_eq!(filtered[0].sound_id, "sound_a");
+
+        let mut filtered = vec![complete_identifiers, missing_video_identifier];
+        filter_judged_sounds_by_source_identifiers(&mut filtered, Some(5), &[]);
+
+        assert_eq!(filtered.len(), 2);
     }
 
     #[test]

@@ -107,6 +107,7 @@ Implemented refinements:
 - `--min-duration-seconds` and `--max-duration-seconds` let production shortlists require sounds that fit the target edit length before opening individual rows
 - judgement summaries now include `duration_seconds_band_counts`, so agents can see sound-length distribution before choosing duration filters
 - judgement summaries now include source identifier coverage and missing source identifier field counts, so agents can see whether shortlisted sounds are traceable before opening individual rows
+- `--min-source-identifiers` and repeated `--require-source-identifier-field` filters let shortlists require traceable TikTok identifiers such as `source_video_url`, `song_id`, or `clip_id`
 - `--min-reason-count` lets shortlists require enough positive evidence before returning a sound, complementing `--max-risk-count` for blocker density
 - `--max-judgement-rank` keeps filtered passes inside the full-library top N by score, trend rank, and sound id, so narrow filters do not accidentally surface low-ranked candidates
 - returned sounds include source URLs and TikTok identifiers (`source_url`, `source_video_url`, `song_id`, `clip_id`, `country_code`, and `duration_seconds`), so shortlisted rows remain traceable without reopening the manifest
