@@ -21,13 +21,14 @@ use crate::{
         RepresentativeLikeCountBandCount, RepresentativeLikeRateBandCount,
         RepresentativeMusicCanReadCount, RepresentativeMusicCanReuseCount,
         RepresentativeMusicCommercialRightTypeCount, RepresentativeMusicDurationBandCount,
-        RepresentativeMusicHasStrongBeatUrlCount, RepresentativeMusicIsOriginalSoundCount,
-        RepresentativeMusicVidCoverageCount, RepresentativeShareCountBandCount,
-        RepresentativeShareRateBandCount, RepresentativeViewCountBandCount,
-        ResolverActorIdCoverageCount, RightsNoteCount, RiskCount, RiskCountCoverageCount,
-        ScoreBandCount, SongIdCountryCoverageCount, SoundImportReport, SoundJudgementFilters,
-        SoundJudgementReport, SoundJudgementSummary, SourceIdentifierCoverageCount,
-        SourceIdentifierFieldCount, TrendRankBandCount, UpdateReport, UsableAssetPairCoverageCount,
+        RepresentativeMusicHasStrongBeatUrlCount, RepresentativeMusicIsBatchTakeDownMusicCount,
+        RepresentativeMusicIsOriginalSoundCount, RepresentativeMusicVidCoverageCount,
+        RepresentativeShareCountBandCount, RepresentativeShareRateBandCount,
+        RepresentativeViewCountBandCount, ResolverActorIdCoverageCount, RightsNoteCount, RiskCount,
+        RiskCountCoverageCount, ScoreBandCount, SongIdCountryCoverageCount, SoundImportReport,
+        SoundJudgementFilters, SoundJudgementReport, SoundJudgementSummary,
+        SourceIdentifierCoverageCount, SourceIdentifierFieldCount, TrendRankBandCount,
+        UpdateReport, UsableAssetPairCoverageCount,
     },
     tiktok::{
         self, DEFAULT_IMPORT_OUTPUT_DIR, ImportTrendingSoundsOptions, LIBRARY_MANIFEST_PATH,
@@ -545,6 +546,9 @@ struct JudgeSoundArgs {
     #[arg(long)]
     representative_music_commercial_right_type: Option<u64>,
 
+    #[arg(long)]
+    representative_music_is_batch_take_down_music: Option<bool>,
+
     #[arg(long, default_value_t = false)]
     require_representative_music_can_read: bool,
 
@@ -808,6 +812,8 @@ impl JudgeSoundArgs {
             representative_music_is_original_sound: self.representative_music_is_original_sound,
             representative_music_commercial_right_type: self
                 .representative_music_commercial_right_type,
+            representative_music_is_batch_take_down_music: self
+                .representative_music_is_batch_take_down_music,
             require_representative_music_can_read: self.require_representative_music_can_read,
             require_representative_music_can_reuse: self.require_representative_music_can_reuse,
             require_representative_music_has_strong_beat_url: self
@@ -872,6 +878,7 @@ impl JudgeSoundArgs {
             self.max_representative_music_duration_seconds,
             self.representative_music_is_original_sound,
             self.representative_music_commercial_right_type,
+            self.representative_music_is_batch_take_down_music,
             self.require_representative_music_can_read,
             self.require_representative_music_can_reuse,
             self.require_representative_music_has_strong_beat_url,
@@ -936,6 +943,7 @@ fn summarize_judged_sounds(sounds: &[JudgedSound]) -> SoundJudgementSummary {
     let mut representative_music_can_reuse_counts = BTreeMap::new();
     let mut representative_music_is_original_sound_counts = BTreeMap::new();
     let mut representative_music_commercial_right_type_counts = BTreeMap::new();
+    let mut representative_music_is_batch_take_down_music_counts = BTreeMap::new();
     let mut representative_music_has_strong_beat_url_counts = BTreeMap::new();
     let mut representative_music_vid_coverage_counts = BTreeMap::new();
     let mut missing_source_identifier_field_counts = BTreeMap::new();
@@ -1120,6 +1128,9 @@ fn summarize_judged_sounds(sounds: &[JudgedSound]) -> SoundJudgementSummary {
             .or_insert(0) += 1;
         *representative_music_commercial_right_type_counts
             .entry(sound.representative_music_commercial_right_type)
+            .or_insert(0) += 1;
+        *representative_music_is_batch_take_down_music_counts
+            .entry(sound.representative_music_is_batch_take_down_music)
             .or_insert(0) += 1;
         *representative_music_has_strong_beat_url_counts
             .entry(sound.representative_music_has_strong_beat_url)
@@ -1410,6 +1421,16 @@ fn summarize_judged_sounds(sounds: &[JudgedSound]) -> SoundJudgementSummary {
                         count,
                     },
                 )
+                .collect(),
+        representative_music_is_batch_take_down_music_counts:
+            representative_music_is_batch_take_down_music_counts
+                .into_iter()
+                .map(|(is_batch_take_down_music, count)| {
+                    RepresentativeMusicIsBatchTakeDownMusicCount {
+                        is_batch_take_down_music,
+                        count,
+                    }
+                })
                 .collect(),
         representative_music_has_strong_beat_url_counts:
             representative_music_has_strong_beat_url_counts
@@ -1953,6 +1974,7 @@ fn filter_judged_sounds_by_representative_music_context(
     max_representative_music_duration_seconds: Option<f64>,
     representative_music_is_original_sound: Option<bool>,
     representative_music_commercial_right_type: Option<u64>,
+    representative_music_is_batch_take_down_music: Option<bool>,
     require_representative_music_can_read: bool,
     require_representative_music_can_reuse: bool,
     require_representative_music_has_strong_beat_url: bool,
@@ -1991,6 +2013,15 @@ fn filter_judged_sounds_by_representative_music_context(
         sounds.retain(|sound| {
             sound.representative_music_commercial_right_type
                 == Some(representative_music_commercial_right_type)
+        });
+    }
+
+    if let Some(representative_music_is_batch_take_down_music) =
+        representative_music_is_batch_take_down_music
+    {
+        sounds.retain(|sound| {
+            sound.representative_music_is_batch_take_down_music
+                == Some(representative_music_is_batch_take_down_music)
         });
     }
 
@@ -2197,6 +2228,7 @@ mod tests {
             representative_music_can_reuse: None,
             representative_music_is_original_sound: None,
             representative_music_commercial_right_type: None,
+            representative_music_is_batch_take_down_music: None,
             representative_music_has_strong_beat_url: None,
             representative_music_vid: None,
             representative_engagement_metric_count: 0,
@@ -2768,6 +2800,7 @@ mod tests {
         reusable.representative_music_duration_seconds = Some(212.28);
         reusable.representative_music_is_original_sound = Some(false);
         reusable.representative_music_commercial_right_type = Some(2);
+        reusable.representative_music_is_batch_take_down_music = Some(false);
         reusable.representative_music_can_read = Some(true);
         reusable.representative_music_can_reuse = Some(true);
         reusable.representative_music_has_strong_beat_url = Some(true);
@@ -2777,6 +2810,7 @@ mod tests {
         too_short.representative_music_duration_seconds = Some(8.5);
         too_short.representative_music_is_original_sound = Some(false);
         too_short.representative_music_commercial_right_type = Some(2);
+        too_short.representative_music_is_batch_take_down_music = Some(false);
         too_short.representative_music_can_read = Some(true);
         too_short.representative_music_can_reuse = Some(true);
         too_short.representative_music_has_strong_beat_url = Some(true);
@@ -2786,6 +2820,7 @@ mod tests {
         not_reusable.representative_music_duration_seconds = Some(180.0);
         not_reusable.representative_music_is_original_sound = Some(false);
         not_reusable.representative_music_commercial_right_type = Some(3);
+        not_reusable.representative_music_is_batch_take_down_music = Some(true);
         not_reusable.representative_music_can_read = Some(true);
         not_reusable.representative_music_can_reuse = Some(false);
         not_reusable.representative_music_has_strong_beat_url = Some(true);
@@ -2795,6 +2830,7 @@ mod tests {
         blank_vid.representative_music_duration_seconds = Some(180.0);
         blank_vid.representative_music_is_original_sound = Some(false);
         blank_vid.representative_music_commercial_right_type = Some(2);
+        blank_vid.representative_music_is_batch_take_down_music = Some(false);
         blank_vid.representative_music_can_read = Some(true);
         blank_vid.representative_music_can_reuse = Some(true);
         blank_vid.representative_music_has_strong_beat_url = Some(true);
@@ -2804,6 +2840,7 @@ mod tests {
         original_sound.representative_music_duration_seconds = Some(180.0);
         original_sound.representative_music_is_original_sound = Some(true);
         original_sound.representative_music_commercial_right_type = Some(2);
+        original_sound.representative_music_is_batch_take_down_music = Some(false);
         original_sound.representative_music_can_read = Some(true);
         original_sound.representative_music_can_reuse = Some(true);
         original_sound.representative_music_has_strong_beat_url = Some(true);
@@ -2816,6 +2853,7 @@ mod tests {
             Some(220.0),
             Some(false),
             Some(2),
+            Some(false),
             true,
             true,
             true,
@@ -3162,6 +3200,7 @@ mod tests {
         rights_risk.representative_music_can_reuse = Some(true);
         rights_risk.representative_music_is_original_sound = Some(false);
         rights_risk.representative_music_commercial_right_type = Some(2);
+        rights_risk.representative_music_is_batch_take_down_music = Some(true);
         rights_risk.representative_music_has_strong_beat_url = Some(true);
         rights_risk.representative_music_vid = Some("music_vid_shared".to_string());
         rights_risk.representative_engagement_metric_count = 4;
@@ -3201,6 +3240,7 @@ mod tests {
         metrics_risk.representative_music_can_reuse = Some(false);
         metrics_risk.representative_music_is_original_sound = Some(false);
         metrics_risk.representative_music_commercial_right_type = Some(3);
+        metrics_risk.representative_music_is_batch_take_down_music = Some(false);
         metrics_risk.representative_music_has_strong_beat_url = Some(false);
         metrics_risk.representative_engagement_metric_count = 2;
         metrics_risk.representative_engagement_metric_fields = vec![
@@ -3261,6 +3301,7 @@ mod tests {
         weak_signal.representative_music_duration_seconds = Some(8.5);
         weak_signal.representative_music_can_read = Some(false);
         weak_signal.representative_music_commercial_right_type = Some(2);
+        weak_signal.representative_music_is_batch_take_down_music = Some(false);
         weak_signal.representative_music_has_strong_beat_url = Some(false);
         weak_signal.missing_representative_engagement_metric_fields = missing_fields.clone();
         weak_signal.local_artifact_path_count = 4;
@@ -3671,6 +3712,24 @@ mod tests {
                 .representative_music_commercial_right_type_counts
                 .iter()
                 .any(|count| { count.commercial_right_type.is_none() && count.count == 1 })
+        );
+        assert!(
+            summary
+                .representative_music_is_batch_take_down_music_counts
+                .iter()
+                .any(|count| { count.is_batch_take_down_music == Some(true) && count.count == 1 })
+        );
+        assert!(
+            summary
+                .representative_music_is_batch_take_down_music_counts
+                .iter()
+                .any(|count| { count.is_batch_take_down_music == Some(false) && count.count == 2 })
+        );
+        assert!(
+            summary
+                .representative_music_is_batch_take_down_music_counts
+                .iter()
+                .any(|count| { count.is_batch_take_down_music.is_none() && count.count == 2 })
         );
         assert!(
             summary
