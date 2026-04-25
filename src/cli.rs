@@ -1,4 +1,4 @@
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::path::PathBuf;
 
 use anyhow::{Result, bail};
@@ -21,9 +21,10 @@ use crate::{
         RepresentativeLikeCountBandCount, RepresentativeLikeRateBandCount,
         RepresentativeShareCountBandCount, RepresentativeShareRateBandCount,
         RepresentativeViewCountBandCount, ResolverActorIdCoverageCount, RightsNoteCount, RiskCount,
-        RiskCountCoverageCount, ScoreBandCount, SoundImportReport, SoundJudgementFilters,
-        SoundJudgementReport, SoundJudgementSummary, SourceIdentifierCoverageCount,
-        SourceIdentifierFieldCount, TrendRankBandCount, UpdateReport, UsableAssetPairCoverageCount,
+        RiskCountCoverageCount, ScoreBandCount, SongIdCountryCoverageCount, SoundImportReport,
+        SoundJudgementFilters, SoundJudgementReport, SoundJudgementSummary,
+        SourceIdentifierCoverageCount, SourceIdentifierFieldCount, TrendRankBandCount,
+        UpdateReport, UsableAssetPairCoverageCount,
     },
     tiktok::{
         self, DEFAULT_IMPORT_OUTPUT_DIR, ImportTrendingSoundsOptions, LIBRARY_MANIFEST_PATH,
@@ -824,6 +825,7 @@ fn summarize_judged_sounds(sounds: &[JudgedSound]) -> SoundJudgementSummary {
     let mut recommended_action_counts = BTreeMap::new();
     let mut platform_counts = BTreeMap::new();
     let mut country_code_counts = BTreeMap::new();
+    let mut song_countries = BTreeMap::<String, BTreeSet<String>>::new();
     let mut score_band_counts = BTreeMap::new();
     let mut trend_rank_band_counts = BTreeMap::new();
     let mut judgement_rank_band_counts = BTreeMap::new();
@@ -874,6 +876,23 @@ fn summarize_judged_sounds(sounds: &[JudgedSound]) -> SoundJudgementSummary {
                     .map(|country_code| country_code.to_ascii_uppercase()),
             )
             .or_insert(0) += 1;
+        if let (Some(song_id), Some(country_code)) = (
+            sound
+                .song_id
+                .as_deref()
+                .map(str::trim)
+                .filter(|song_id| !song_id.is_empty()),
+            sound
+                .country_code
+                .as_deref()
+                .map(str::trim)
+                .filter(|country_code| !country_code.is_empty()),
+        ) {
+            song_countries
+                .entry(song_id.to_string())
+                .or_default()
+                .insert(country_code.to_ascii_uppercase());
+        }
         *score_band_counts
             .entry(score_band(sound.score).to_string())
             .or_insert(0) += 1;
@@ -1020,6 +1039,13 @@ fn summarize_judged_sounds(sounds: &[JudgedSound]) -> SoundJudgementSummary {
         }
     }
 
+    let mut song_id_country_coverage_counts = BTreeMap::new();
+    for country_codes in song_countries.into_values() {
+        *song_id_country_coverage_counts
+            .entry(country_codes.len())
+            .or_insert(0usize) += 1;
+    }
+
     SoundJudgementSummary {
         recommended_action_counts: recommended_action_counts
             .into_iter()
@@ -1037,6 +1063,13 @@ fn summarize_judged_sounds(sounds: &[JudgedSound]) -> SoundJudgementSummary {
             .map(|(country_code, count)| CountryCodeCount {
                 country_code,
                 count,
+            })
+            .collect(),
+        song_id_country_coverage_counts: song_id_country_coverage_counts
+            .into_iter()
+            .map(|(country_code_count, song_id_count)| SongIdCountryCoverageCount {
+                country_code_count,
+                song_id_count,
             })
             .collect(),
         score_band_counts: score_band_counts
@@ -2788,6 +2821,8 @@ mod tests {
     #[test]
     fn summarize_judged_sounds_counts_actions_score_bands_reasons_and_risks() {
         let mut rights_risk = judged_sound("sound_a", 95, "shortlist_after_rights_review");
+        rights_risk.song_id = Some("shared_song".to_string());
+        rights_risk.country_code = Some("US".to_string());
         rights_risk.judgement_rank = Some(1);
         rights_risk.trend_rank = Some(1);
         rights_risk.duration_seconds = Some(41);
@@ -2818,6 +2853,8 @@ mod tests {
             .risks
             .push("Rights still need manual verification before production use".to_string());
         let mut metrics_risk = judged_sound("sound_b", 82, "shortlist_after_rights_review");
+        metrics_risk.song_id = Some("shared_song".to_string());
+        metrics_risk.country_code = Some("GB".to_string());
         metrics_risk.judgement_rank = Some(11);
         metrics_risk.trend_rank = Some(12);
         metrics_risk.duration_seconds = Some(18);
@@ -2873,6 +2910,8 @@ mod tests {
             "representative_share_count".to_string(),
         ];
         let mut weak_signal = judged_sound("sound_c", 65, "shortlist");
+        weak_signal.song_id = Some("shared_song".to_string());
+        weak_signal.country_code = Some("CA".to_string());
         weak_signal.judgement_rank = Some(26);
         weak_signal.trend_rank = Some(27);
         weak_signal.duration_seconds = Some(7);
@@ -2902,6 +2941,8 @@ mod tests {
             "local_download_path".to_string(),
         ];
         let mut needs_review = judged_sound("sound_d", 40, "needs_review");
+        needs_review.song_id = Some("regional_song".to_string());
+        needs_review.country_code = Some("US".to_string());
         needs_review.judgement_rank = Some(51);
         needs_review.trend_rank = Some(51);
         needs_review.duration_seconds = Some(65);
@@ -2983,13 +3024,37 @@ mod tests {
             summary
                 .country_code_counts
                 .iter()
-                .any(|count| { count.country_code.as_deref() == Some("US") && count.count == 4 })
+                .any(|count| { count.country_code.as_deref() == Some("US") && count.count == 2 })
+        );
+        assert!(
+            summary
+                .country_code_counts
+                .iter()
+                .any(|count| { count.country_code.as_deref() == Some("GB") && count.count == 1 })
+        );
+        assert!(
+            summary
+                .country_code_counts
+                .iter()
+                .any(|count| { count.country_code.as_deref() == Some("CA") && count.count == 1 })
         );
         assert!(
             summary
                 .country_code_counts
                 .iter()
                 .any(|count| { count.country_code.is_none() && count.count == 1 })
+        );
+        assert!(
+            summary
+                .song_id_country_coverage_counts
+                .iter()
+                .any(|count| { count.country_code_count == 3 && count.song_id_count == 1 })
+        );
+        assert!(
+            summary
+                .song_id_country_coverage_counts
+                .iter()
+                .any(|count| { count.country_code_count == 1 && count.song_id_count == 1 })
         );
         assert!(
             summary
