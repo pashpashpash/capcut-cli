@@ -871,8 +871,7 @@ fn judge_manifest_entry(manifest_path: &Path, entry: &ManifestEntry) -> Result<J
         representative_music_can_read: representative_music_signals.can_read,
         representative_music_can_reuse: representative_music_signals.can_reuse,
         representative_music_is_original_sound: representative_music_signals.is_original_sound,
-        representative_music_has_strong_beat_url: representative_music_signals
-            .has_strong_beat_url,
+        representative_music_has_strong_beat_url: representative_music_signals.has_strong_beat_url,
         representative_music_vid: representative_music_signals.music_vid,
         representative_engagement_metric_count,
         representative_engagement_metric_fields,

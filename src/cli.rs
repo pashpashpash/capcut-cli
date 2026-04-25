@@ -19,6 +19,9 @@ use crate::{
         RepresentativeCommentRateBandCount, RepresentativeEngagementCountBandCount,
         RepresentativeEngagementMetricFieldCount, RepresentativeEngagementRateBandCount,
         RepresentativeLikeCountBandCount, RepresentativeLikeRateBandCount,
+        RepresentativeMusicCanReadCount, RepresentativeMusicCanReuseCount,
+        RepresentativeMusicDurationBandCount, RepresentativeMusicHasStrongBeatUrlCount,
+        RepresentativeMusicIsOriginalSoundCount, RepresentativeMusicVidCoverageCount,
         RepresentativeShareCountBandCount, RepresentativeShareRateBandCount,
         RepresentativeViewCountBandCount, ResolverActorIdCoverageCount, RightsNoteCount, RiskCount,
         RiskCountCoverageCount, ScoreBandCount, SongIdCountryCoverageCount, SoundImportReport,
@@ -531,6 +534,24 @@ struct JudgeSoundArgs {
     min_representative_share_rate_per_1000_views: Option<u64>,
 
     #[arg(long)]
+    min_representative_music_duration_seconds: Option<f64>,
+
+    #[arg(long)]
+    max_representative_music_duration_seconds: Option<f64>,
+
+    #[arg(long, default_value_t = false)]
+    require_representative_music_can_read: bool,
+
+    #[arg(long, default_value_t = false)]
+    require_representative_music_can_reuse: bool,
+
+    #[arg(long, default_value_t = false)]
+    require_representative_music_has_strong_beat_url: bool,
+
+    #[arg(long, default_value_t = false)]
+    require_representative_music_vid: bool,
+
+    #[arg(long)]
     min_representative_engagement_metrics: Option<usize>,
 
     #[arg(long = "require-engagement-metric-field")]
@@ -559,6 +580,32 @@ impl JudgeSoundArgs {
         {
             if min_duration_seconds > max_duration_seconds {
                 bail!("--min-duration-seconds must be less than or equal to --max-duration-seconds")
+            }
+        }
+        if self
+            .min_representative_music_duration_seconds
+            .is_some_and(|duration| duration < 0.0)
+        {
+            bail!("--min-representative-music-duration-seconds must be greater than or equal to 0")
+        }
+        if self
+            .max_representative_music_duration_seconds
+            .is_some_and(|duration| duration <= 0.0)
+        {
+            bail!("--max-representative-music-duration-seconds must be greater than 0")
+        }
+        if let (
+            Some(min_representative_music_duration_seconds),
+            Some(max_representative_music_duration_seconds),
+        ) = (
+            self.min_representative_music_duration_seconds,
+            self.max_representative_music_duration_seconds,
+        ) {
+            if min_representative_music_duration_seconds > max_representative_music_duration_seconds
+            {
+                bail!(
+                    "--min-representative-music-duration-seconds must be less than or equal to --max-representative-music-duration-seconds"
+                )
             }
         }
         if self
@@ -748,6 +795,15 @@ impl JudgeSoundArgs {
             min_representative_shares: self.min_representative_shares,
             min_representative_share_rate_per_1000_views: self
                 .min_representative_share_rate_per_1000_views,
+            min_representative_music_duration_seconds: self
+                .min_representative_music_duration_seconds,
+            max_representative_music_duration_seconds: self
+                .max_representative_music_duration_seconds,
+            require_representative_music_can_read: self.require_representative_music_can_read,
+            require_representative_music_can_reuse: self.require_representative_music_can_reuse,
+            require_representative_music_has_strong_beat_url: self
+                .require_representative_music_has_strong_beat_url,
+            require_representative_music_vid: self.require_representative_music_vid,
             min_representative_engagement_metrics: self.min_representative_engagement_metrics,
             required_engagement_metric_fields: self.required_engagement_metric_fields.clone(),
         };
@@ -800,6 +856,15 @@ impl JudgeSoundArgs {
             &mut sounds,
             self.min_local_artifact_paths,
             &self.required_local_artifact_path_fields,
+        );
+        filter_judged_sounds_by_representative_music_context(
+            &mut sounds,
+            self.min_representative_music_duration_seconds,
+            self.max_representative_music_duration_seconds,
+            self.require_representative_music_can_read,
+            self.require_representative_music_can_reuse,
+            self.require_representative_music_has_strong_beat_url,
+            self.require_representative_music_vid,
         );
         if let Some(top) = self.top {
             sounds.truncate(top);
@@ -855,6 +920,12 @@ fn summarize_judged_sounds(sounds: &[JudgedSound]) -> SoundJudgementSummary {
     let mut representative_engagement_rate_band_counts = BTreeMap::new();
     let mut representative_comment_rate_band_counts = BTreeMap::new();
     let mut representative_share_rate_band_counts = BTreeMap::new();
+    let mut representative_music_duration_band_counts = BTreeMap::new();
+    let mut representative_music_can_read_counts = BTreeMap::new();
+    let mut representative_music_can_reuse_counts = BTreeMap::new();
+    let mut representative_music_is_original_sound_counts = BTreeMap::new();
+    let mut representative_music_has_strong_beat_url_counts = BTreeMap::new();
+    let mut representative_music_vid_coverage_counts = BTreeMap::new();
     let mut missing_source_identifier_field_counts = BTreeMap::new();
     let mut missing_local_artifact_path_field_counts = BTreeMap::new();
     let mut missing_engagement_metric_field_counts = BTreeMap::new();
@@ -1021,6 +1092,31 @@ fn summarize_judged_sounds(sounds: &[JudgedSound]) -> SoundJudgementSummary {
                 sound.representative_share_rate_per_1000_views,
             ))
             .or_insert(0) += 1;
+        *representative_music_duration_band_counts
+            .entry(representative_music_duration_band(
+                sound.representative_music_duration_seconds,
+            ))
+            .or_insert(0) += 1;
+        *representative_music_can_read_counts
+            .entry(sound.representative_music_can_read)
+            .or_insert(0) += 1;
+        *representative_music_can_reuse_counts
+            .entry(sound.representative_music_can_reuse)
+            .or_insert(0) += 1;
+        *representative_music_is_original_sound_counts
+            .entry(sound.representative_music_is_original_sound)
+            .or_insert(0) += 1;
+        *representative_music_has_strong_beat_url_counts
+            .entry(sound.representative_music_has_strong_beat_url)
+            .or_insert(0) += 1;
+        *representative_music_vid_coverage_counts
+            .entry(
+                sound
+                    .representative_music_vid
+                    .as_deref()
+                    .is_some_and(|music_vid| !music_vid.trim().is_empty()),
+            )
+            .or_insert(0) += 1;
         for field in &sound.missing_local_artifact_path_fields {
             *missing_local_artifact_path_field_counts
                 .entry(field.clone())
@@ -1067,10 +1163,12 @@ fn summarize_judged_sounds(sounds: &[JudgedSound]) -> SoundJudgementSummary {
             .collect(),
         song_id_country_coverage_counts: song_id_country_coverage_counts
             .into_iter()
-            .map(|(country_code_count, song_id_count)| SongIdCountryCoverageCount {
-                country_code_count,
-                song_id_count,
-            })
+            .map(
+                |(country_code_count, song_id_count)| SongIdCountryCoverageCount {
+                    country_code_count,
+                    song_id_count,
+                },
+            )
             .collect(),
         score_band_counts: score_band_counts
             .into_iter()
@@ -1263,6 +1361,50 @@ fn summarize_judged_sounds(sounds: &[JudgedSound]) -> SoundJudgementSummary {
                 count,
             })
             .collect(),
+        representative_music_duration_band_counts: representative_music_duration_band_counts
+            .into_iter()
+            .map(|(band, count)| RepresentativeMusicDurationBandCount {
+                band: band.to_string(),
+                count,
+            })
+            .collect(),
+        representative_music_can_read_counts: representative_music_can_read_counts
+            .into_iter()
+            .map(|(can_read, count)| RepresentativeMusicCanReadCount { can_read, count })
+            .collect(),
+        representative_music_can_reuse_counts: representative_music_can_reuse_counts
+            .into_iter()
+            .map(|(can_reuse, count)| RepresentativeMusicCanReuseCount { can_reuse, count })
+            .collect(),
+        representative_music_is_original_sound_counts:
+            representative_music_is_original_sound_counts
+                .into_iter()
+                .map(
+                    |(is_original_sound, count)| RepresentativeMusicIsOriginalSoundCount {
+                        is_original_sound,
+                        count,
+                    },
+                )
+                .collect(),
+        representative_music_has_strong_beat_url_counts:
+            representative_music_has_strong_beat_url_counts
+                .into_iter()
+                .map(
+                    |(has_strong_beat_url, count)| RepresentativeMusicHasStrongBeatUrlCount {
+                        has_strong_beat_url,
+                        count,
+                    },
+                )
+                .collect(),
+        representative_music_vid_coverage_counts: representative_music_vid_coverage_counts
+            .into_iter()
+            .map(
+                |(music_vid_present, count)| RepresentativeMusicVidCoverageCount {
+                    music_vid_present,
+                    count,
+                },
+            )
+            .collect(),
         missing_source_identifier_field_counts: missing_source_identifier_field_counts
             .into_iter()
             .map(|(field, count)| MissingSourceIdentifierFieldCount { field, count })
@@ -1422,6 +1564,17 @@ fn representative_share_rate_band(rate_per_1000_views: Option<u64>) -> &'static 
         Some(10..=24) => "10_24",
         Some(1..=9) => "1_9",
         Some(0) => "0",
+        None => "missing",
+    }
+}
+
+fn representative_music_duration_band(duration_seconds: Option<f64>) -> &'static str {
+    match duration_seconds {
+        Some(duration) if duration >= 60.0 => "60_plus",
+        Some(duration) if duration >= 30.0 => "30_59",
+        Some(duration) if duration >= 10.0 => "10_29",
+        Some(duration) if duration > 0.0 => "0_9_99",
+        Some(_) => "0",
         None => "missing",
     }
 }
@@ -1765,6 +1918,57 @@ fn filter_judged_sounds_by_local_artifacts(
                         .iter()
                         .any(|field| field == required)
                 })
+        });
+    }
+}
+
+fn filter_judged_sounds_by_representative_music_context(
+    sounds: &mut Vec<JudgedSound>,
+    min_representative_music_duration_seconds: Option<f64>,
+    max_representative_music_duration_seconds: Option<f64>,
+    require_representative_music_can_read: bool,
+    require_representative_music_can_reuse: bool,
+    require_representative_music_has_strong_beat_url: bool,
+    require_representative_music_vid: bool,
+) {
+    if let Some(min_representative_music_duration_seconds) =
+        min_representative_music_duration_seconds
+    {
+        sounds.retain(|sound| {
+            sound
+                .representative_music_duration_seconds
+                .is_some_and(|duration| duration >= min_representative_music_duration_seconds)
+        });
+    }
+
+    if let Some(max_representative_music_duration_seconds) =
+        max_representative_music_duration_seconds
+    {
+        sounds.retain(|sound| {
+            sound
+                .representative_music_duration_seconds
+                .is_some_and(|duration| duration <= max_representative_music_duration_seconds)
+        });
+    }
+
+    if require_representative_music_can_read {
+        sounds.retain(|sound| sound.representative_music_can_read == Some(true));
+    }
+
+    if require_representative_music_can_reuse {
+        sounds.retain(|sound| sound.representative_music_can_reuse == Some(true));
+    }
+
+    if require_representative_music_has_strong_beat_url {
+        sounds.retain(|sound| sound.representative_music_has_strong_beat_url == Some(true));
+    }
+
+    if require_representative_music_vid {
+        sounds.retain(|sound| {
+            sound
+                .representative_music_vid
+                .as_deref()
+                .is_some_and(|music_vid| !music_vid.trim().is_empty())
         });
     }
 }
@@ -2515,6 +2719,51 @@ mod tests {
     }
 
     #[test]
+    fn filter_judged_sounds_applies_representative_music_filters() {
+        let mut reusable = judged_sound("sound_a", 95, "shortlist_after_rights_review");
+        reusable.representative_music_duration_seconds = Some(212.28);
+        reusable.representative_music_can_read = Some(true);
+        reusable.representative_music_can_reuse = Some(true);
+        reusable.representative_music_has_strong_beat_url = Some(true);
+        reusable.representative_music_vid = Some("music_vid_1".to_string());
+
+        let mut too_short = judged_sound("sound_b", 95, "shortlist_after_rights_review");
+        too_short.representative_music_duration_seconds = Some(8.5);
+        too_short.representative_music_can_read = Some(true);
+        too_short.representative_music_can_reuse = Some(true);
+        too_short.representative_music_has_strong_beat_url = Some(true);
+        too_short.representative_music_vid = Some("music_vid_2".to_string());
+
+        let mut not_reusable = judged_sound("sound_c", 95, "shortlist_after_rights_review");
+        not_reusable.representative_music_duration_seconds = Some(180.0);
+        not_reusable.representative_music_can_read = Some(true);
+        not_reusable.representative_music_can_reuse = Some(false);
+        not_reusable.representative_music_has_strong_beat_url = Some(true);
+        not_reusable.representative_music_vid = Some("music_vid_3".to_string());
+
+        let mut blank_vid = judged_sound("sound_d", 95, "shortlist_after_rights_review");
+        blank_vid.representative_music_duration_seconds = Some(180.0);
+        blank_vid.representative_music_can_read = Some(true);
+        blank_vid.representative_music_can_reuse = Some(true);
+        blank_vid.representative_music_has_strong_beat_url = Some(true);
+        blank_vid.representative_music_vid = Some("   ".to_string());
+
+        let mut filtered = vec![reusable, too_short, not_reusable, blank_vid];
+        filter_judged_sounds_by_representative_music_context(
+            &mut filtered,
+            Some(30.0),
+            Some(220.0),
+            true,
+            true,
+            true,
+            true,
+        );
+
+        assert_eq!(filtered.len(), 1);
+        assert_eq!(filtered[0].sound_id, "sound_a");
+    }
+
+    #[test]
     fn filter_judged_sounds_applies_engagement_thresholds() {
         let mut high_engagement = judged_sound("sound_a", 95, "shortlist_after_rights_review");
         high_engagement.representative_view_count = Some(2_000_000);
@@ -2845,6 +3094,12 @@ mod tests {
         rights_risk.representative_engagement_rate_per_1000_views = Some(235);
         rights_risk.representative_comment_rate_per_1000_views = Some(7);
         rights_risk.representative_share_rate_per_1000_views = Some(36);
+        rights_risk.representative_music_duration_seconds = Some(212.28);
+        rights_risk.representative_music_can_read = Some(true);
+        rights_risk.representative_music_can_reuse = Some(true);
+        rights_risk.representative_music_is_original_sound = Some(false);
+        rights_risk.representative_music_has_strong_beat_url = Some(true);
+        rights_risk.representative_music_vid = Some("music_vid_shared".to_string());
         rights_risk.representative_engagement_metric_count = 4;
         rights_risk.representative_engagement_metric_fields = vec![
             "representative_view_count".to_string(),
@@ -2877,6 +3132,11 @@ mod tests {
         metrics_risk.representative_engagement_rate_per_1000_views = Some(85);
         metrics_risk.representative_comment_rate_per_1000_views = Some(2);
         metrics_risk.representative_share_rate_per_1000_views = Some(12);
+        metrics_risk.representative_music_duration_seconds = Some(45.5);
+        metrics_risk.representative_music_can_read = Some(true);
+        metrics_risk.representative_music_can_reuse = Some(false);
+        metrics_risk.representative_music_is_original_sound = Some(false);
+        metrics_risk.representative_music_has_strong_beat_url = Some(false);
         metrics_risk.representative_engagement_metric_count = 2;
         metrics_risk.representative_engagement_metric_fields = vec![
             "representative_view_count".to_string(),
@@ -2933,6 +3193,9 @@ mod tests {
         weak_signal.representative_engagement_rate_per_1000_views = Some(40);
         weak_signal.representative_comment_rate_per_1000_views = Some(1);
         weak_signal.representative_share_rate_per_1000_views = Some(4);
+        weak_signal.representative_music_duration_seconds = Some(8.5);
+        weak_signal.representative_music_can_read = Some(false);
+        weak_signal.representative_music_has_strong_beat_url = Some(false);
         weak_signal.missing_representative_engagement_metric_fields = missing_fields.clone();
         weak_signal.local_artifact_path_count = 4;
         weak_signal.local_artifact_path_fields = vec![
@@ -2955,6 +3218,9 @@ mod tests {
         needs_review.downloaded_video_count = None;
         needs_review.extracted_audio_count = None;
         needs_review.usable_asset_pair_count = None;
+        needs_review.representative_music_duration_seconds = Some(65.0);
+        needs_review.representative_music_is_original_sound = Some(true);
+        needs_review.representative_music_vid = Some("music_vid_regional".to_string());
         needs_review.missing_representative_engagement_metric_fields = missing_fields.clone();
         needs_review.local_artifact_path_count = 2;
         needs_review.local_artifact_path_fields = vec![
@@ -3237,6 +3503,114 @@ mod tests {
             count.rights_note == "For research only. Verify rights before production use."
                 && count.count == 4
         }));
+        assert!(
+            summary
+                .representative_music_duration_band_counts
+                .iter()
+                .any(|count| { count.band == "60_plus" && count.count == 2 })
+        );
+        assert!(
+            summary
+                .representative_music_duration_band_counts
+                .iter()
+                .any(|count| { count.band == "30_59" && count.count == 1 })
+        );
+        assert!(
+            summary
+                .representative_music_duration_band_counts
+                .iter()
+                .any(|count| { count.band == "0_9_99" && count.count == 1 })
+        );
+        assert!(
+            summary
+                .representative_music_duration_band_counts
+                .iter()
+                .any(|count| { count.band == "missing" && count.count == 1 })
+        );
+        assert!(
+            summary
+                .representative_music_can_read_counts
+                .iter()
+                .any(|count| { count.can_read == Some(true) && count.count == 2 })
+        );
+        assert!(
+            summary
+                .representative_music_can_read_counts
+                .iter()
+                .any(|count| { count.can_read == Some(false) && count.count == 1 })
+        );
+        assert!(
+            summary
+                .representative_music_can_read_counts
+                .iter()
+                .any(|count| { count.can_read.is_none() && count.count == 2 })
+        );
+        assert!(
+            summary
+                .representative_music_can_reuse_counts
+                .iter()
+                .any(|count| { count.can_reuse == Some(true) && count.count == 1 })
+        );
+        assert!(
+            summary
+                .representative_music_can_reuse_counts
+                .iter()
+                .any(|count| { count.can_reuse == Some(false) && count.count == 1 })
+        );
+        assert!(
+            summary
+                .representative_music_can_reuse_counts
+                .iter()
+                .any(|count| { count.can_reuse.is_none() && count.count == 3 })
+        );
+        assert!(
+            summary
+                .representative_music_is_original_sound_counts
+                .iter()
+                .any(|count| { count.is_original_sound == Some(false) && count.count == 2 })
+        );
+        assert!(
+            summary
+                .representative_music_is_original_sound_counts
+                .iter()
+                .any(|count| { count.is_original_sound == Some(true) && count.count == 1 })
+        );
+        assert!(
+            summary
+                .representative_music_is_original_sound_counts
+                .iter()
+                .any(|count| { count.is_original_sound.is_none() && count.count == 2 })
+        );
+        assert!(
+            summary
+                .representative_music_has_strong_beat_url_counts
+                .iter()
+                .any(|count| { count.has_strong_beat_url == Some(true) && count.count == 1 })
+        );
+        assert!(
+            summary
+                .representative_music_has_strong_beat_url_counts
+                .iter()
+                .any(|count| { count.has_strong_beat_url == Some(false) && count.count == 2 })
+        );
+        assert!(
+            summary
+                .representative_music_has_strong_beat_url_counts
+                .iter()
+                .any(|count| { count.has_strong_beat_url.is_none() && count.count == 2 })
+        );
+        assert!(
+            summary
+                .representative_music_vid_coverage_counts
+                .iter()
+                .any(|count| { count.music_vid_present && count.count == 2 })
+        );
+        assert!(
+            summary
+                .representative_music_vid_coverage_counts
+                .iter()
+                .any(|count| { !count.music_vid_present && count.count == 3 })
+        );
         assert!(summary.rights_note_counts.iter().any(|count| {
             count.rights_note == "No production license is recorded" && count.count == 1
         }));
