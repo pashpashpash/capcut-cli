@@ -196,6 +196,7 @@ pub struct SoundJudgementFilters {
     pub min_representative_share_rate_per_1000_views: Option<u64>,
     pub min_representative_music_duration_seconds: Option<f64>,
     pub max_representative_music_duration_seconds: Option<f64>,
+    pub representative_music_is_original_sound: Option<bool>,
     pub require_representative_music_can_read: bool,
     pub require_representative_music_can_reuse: bool,
     pub require_representative_music_has_strong_beat_url: bool,

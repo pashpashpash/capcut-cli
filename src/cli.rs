@@ -539,6 +539,9 @@ struct JudgeSoundArgs {
     #[arg(long)]
     max_representative_music_duration_seconds: Option<f64>,
 
+    #[arg(long)]
+    representative_music_is_original_sound: Option<bool>,
+
     #[arg(long, default_value_t = false)]
     require_representative_music_can_read: bool,
 
@@ -799,6 +802,7 @@ impl JudgeSoundArgs {
                 .min_representative_music_duration_seconds,
             max_representative_music_duration_seconds: self
                 .max_representative_music_duration_seconds,
+            representative_music_is_original_sound: self.representative_music_is_original_sound,
             require_representative_music_can_read: self.require_representative_music_can_read,
             require_representative_music_can_reuse: self.require_representative_music_can_reuse,
             require_representative_music_has_strong_beat_url: self
@@ -861,6 +865,7 @@ impl JudgeSoundArgs {
             &mut sounds,
             self.min_representative_music_duration_seconds,
             self.max_representative_music_duration_seconds,
+            self.representative_music_is_original_sound,
             self.require_representative_music_can_read,
             self.require_representative_music_can_reuse,
             self.require_representative_music_has_strong_beat_url,
@@ -1926,6 +1931,7 @@ fn filter_judged_sounds_by_representative_music_context(
     sounds: &mut Vec<JudgedSound>,
     min_representative_music_duration_seconds: Option<f64>,
     max_representative_music_duration_seconds: Option<f64>,
+    representative_music_is_original_sound: Option<bool>,
     require_representative_music_can_read: bool,
     require_representative_music_can_reuse: bool,
     require_representative_music_has_strong_beat_url: bool,
@@ -1948,6 +1954,13 @@ fn filter_judged_sounds_by_representative_music_context(
             sound
                 .representative_music_duration_seconds
                 .is_some_and(|duration| duration <= max_representative_music_duration_seconds)
+        });
+    }
+
+    if let Some(representative_music_is_original_sound) = representative_music_is_original_sound {
+        sounds.retain(|sound| {
+            sound.representative_music_is_original_sound
+                == Some(representative_music_is_original_sound)
         });
     }
 
@@ -2722,6 +2735,7 @@ mod tests {
     fn filter_judged_sounds_applies_representative_music_filters() {
         let mut reusable = judged_sound("sound_a", 95, "shortlist_after_rights_review");
         reusable.representative_music_duration_seconds = Some(212.28);
+        reusable.representative_music_is_original_sound = Some(false);
         reusable.representative_music_can_read = Some(true);
         reusable.representative_music_can_reuse = Some(true);
         reusable.representative_music_has_strong_beat_url = Some(true);
@@ -2729,6 +2743,7 @@ mod tests {
 
         let mut too_short = judged_sound("sound_b", 95, "shortlist_after_rights_review");
         too_short.representative_music_duration_seconds = Some(8.5);
+        too_short.representative_music_is_original_sound = Some(false);
         too_short.representative_music_can_read = Some(true);
         too_short.representative_music_can_reuse = Some(true);
         too_short.representative_music_has_strong_beat_url = Some(true);
@@ -2736,6 +2751,7 @@ mod tests {
 
         let mut not_reusable = judged_sound("sound_c", 95, "shortlist_after_rights_review");
         not_reusable.representative_music_duration_seconds = Some(180.0);
+        not_reusable.representative_music_is_original_sound = Some(false);
         not_reusable.representative_music_can_read = Some(true);
         not_reusable.representative_music_can_reuse = Some(false);
         not_reusable.representative_music_has_strong_beat_url = Some(true);
@@ -2743,16 +2759,26 @@ mod tests {
 
         let mut blank_vid = judged_sound("sound_d", 95, "shortlist_after_rights_review");
         blank_vid.representative_music_duration_seconds = Some(180.0);
+        blank_vid.representative_music_is_original_sound = Some(false);
         blank_vid.representative_music_can_read = Some(true);
         blank_vid.representative_music_can_reuse = Some(true);
         blank_vid.representative_music_has_strong_beat_url = Some(true);
         blank_vid.representative_music_vid = Some("   ".to_string());
 
-        let mut filtered = vec![reusable, too_short, not_reusable, blank_vid];
+        let mut original_sound = judged_sound("sound_e", 95, "shortlist_after_rights_review");
+        original_sound.representative_music_duration_seconds = Some(180.0);
+        original_sound.representative_music_is_original_sound = Some(true);
+        original_sound.representative_music_can_read = Some(true);
+        original_sound.representative_music_can_reuse = Some(true);
+        original_sound.representative_music_has_strong_beat_url = Some(true);
+        original_sound.representative_music_vid = Some("music_vid_4".to_string());
+
+        let mut filtered = vec![reusable, too_short, not_reusable, blank_vid, original_sound];
         filter_judged_sounds_by_representative_music_context(
             &mut filtered,
             Some(30.0),
             Some(220.0),
+            Some(false),
             true,
             true,
             true,
