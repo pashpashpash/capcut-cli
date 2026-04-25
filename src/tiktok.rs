@@ -2015,10 +2015,12 @@ fn rate_sum_per_1000(numerators: &[Option<u64>], denominator: Option<u64>) -> Op
     has_numerator.then(|| u64::try_from((total * 1_000) / denominator).ok())?
 }
 
+fn risk_requires_rights_review(risk: &str) -> bool {
+    risk.contains("Rights still need manual verification") || risk.contains("batch-takedown music")
+}
+
 fn recommended_action(score: u32, risks: &[String]) -> &'static str {
-    let rights_review_needed = risks
-        .iter()
-        .any(|risk| risk.contains("Rights still need manual verification"));
+    let rights_review_needed = risks.iter().any(|risk| risk_requires_rights_review(risk));
 
     match (score, rights_review_needed) {
         (75..=100, false) => "use_first",
@@ -2601,6 +2603,109 @@ mod tests {
             &"Representative music metadata marks the sound as batch-takedown music".to_string()
         ));
         assert_eq!(judged.score, 100);
+
+        let _ = std::fs::remove_dir_all(&temp_dir);
+    }
+
+    #[test]
+    fn judging_batch_takedown_music_requires_rights_review_even_without_rights_note() {
+        let temp_dir = std::env::temp_dir().join(format!(
+            "capcut-cli-batch-takedown-rights-review-test-{}",
+            std::process::id()
+        ));
+        let _ = std::fs::remove_dir_all(&temp_dir);
+        std::fs::create_dir_all(&temp_dir).expect("create temp dir");
+        let posts_path = temp_dir.join("posts.json");
+        let selection_path = temp_dir.join("selection.json");
+        std::fs::write(
+            &posts_path,
+            serde_json::to_vec_pretty(&json!({
+                "raw_dataset": [
+                    {
+                        "aweme_id": "7564571947263069454",
+                        "author": {
+                            "unique_id": "creator"
+                        },
+                        "statistics": {
+                            "play_count": 37_548_076,
+                            "digg_count": 7_427_697,
+                            "comment_count": 51_294,
+                            "share_count": 1_375_712
+                        },
+                        "music": {
+                            "is_original_sound": false,
+                            "commercial_right_type": 2,
+                            "strong_beat_url": {
+                                "url_list": ["https://cdn.example.com/beat-track"]
+                            },
+                            "extra": "{\"aed_music_dur\":212.28,\"can_read\":true,\"can_reuse\":true,\"is_batch_take_down_music\":true,\"music_vid\":\"v10ad6g50000cds030jc77u5bevbglsg\"}"
+                        }
+                    }
+                ]
+            }))
+            .expect("serialize posts"),
+        )
+        .expect("write posts");
+        std::fs::write(
+            &selection_path,
+            serde_json::to_vec_pretty(&json!({
+                "normalized_candidate_count": 20
+            }))
+            .expect("serialize selection"),
+        )
+        .expect("write selection");
+
+        let entry = ManifestEntry {
+            id: "tiktok_sound_123".to_string(),
+            title: "Example Sound".to_string(),
+            author: "Example Creator".to_string(),
+            platform: "tiktok".to_string(),
+            trend_rank: Some(1),
+            source_url: "https://www.tiktok.com/music/example-123".to_string(),
+            source_video_url: Some(
+                "https://www.tiktok.com/@creator/video/7564571947263069454".to_string(),
+            ),
+            duration_seconds: Some(12),
+            local_audio_path: "library/sounds/imported/example/audio.mp3".to_string(),
+            local_metadata_path: "missing-metadata.json".to_string(),
+            rights_note: "Catalog metadata is present.".to_string(),
+            provenance: "Imported from Apify trending sounds".to_string(),
+            song_id: Some("123".to_string()),
+            clip_id: Some("456".to_string()),
+            country_code: Some("US".to_string()),
+            local_video_path: Some("library/sounds/imported/example/video.mp4".to_string()),
+            local_trend_path: None,
+            local_posts_path: Some(posts_path.display().to_string()),
+            local_selection_path: Some(selection_path.display().to_string()),
+            local_download_path: None,
+            local_videos_dir: Some("library/sounds/imported/example/videos".to_string()),
+            local_audios_dir: Some("library/sounds/imported/example/audios".to_string()),
+            downloaded_video_count: Some(1),
+            extracted_audio_count: Some(1),
+            representative_video_url: None,
+            representative_video_id: Some("7564571947263069454".to_string()),
+            representative_comment_count: None,
+            representative_share_count: None,
+            representative_like_count: None,
+            representative_view_count: None,
+            resolver_actor_id: Some("resolver".to_string()),
+            download_method: Some(DIRECT_DOWNLOAD_METHOD.to_string()),
+        };
+
+        let judged = judge_manifest_entry(Path::new("library/sounds/manifest.json"), &entry)
+            .expect("judged sound");
+
+        assert_eq!(judged.score, 100);
+        assert_eq!(judged.recommended_action, "shortlist_after_rights_review");
+        assert!(judged.risks.contains(
+            &"Representative music metadata marks the sound as batch-takedown music".to_string()
+        ));
+        assert!(
+            judged
+                .risks
+                .iter()
+                .all(|risk| !risk.contains("Rights still need manual verification"))
+        );
 
         let _ = std::fs::remove_dir_all(&temp_dir);
     }
