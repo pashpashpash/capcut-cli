@@ -266,6 +266,7 @@ struct RepresentativeMusicSignals {
     can_read: Option<bool>,
     can_reuse: Option<bool>,
     is_original_sound: Option<bool>,
+    commercial_right_type: Option<u64>,
     has_strong_beat_url: Option<bool>,
     music_vid: Option<String>,
 }
@@ -871,6 +872,8 @@ fn judge_manifest_entry(manifest_path: &Path, entry: &ManifestEntry) -> Result<J
         representative_music_can_read: representative_music_signals.can_read,
         representative_music_can_reuse: representative_music_signals.can_reuse,
         representative_music_is_original_sound: representative_music_signals.is_original_sound,
+        representative_music_commercial_right_type: representative_music_signals
+            .commercial_right_type,
         representative_music_has_strong_beat_url: representative_music_signals.has_strong_beat_url,
         representative_music_vid: representative_music_signals.music_vid,
         representative_engagement_metric_count,
@@ -1833,6 +1836,21 @@ fn representative_music_signals_from_row(row: &Value) -> RepresentativeMusicSign
             row,
             &[&["music", "is_original_sound"], &["music", "is_original"]],
         ),
+        commercial_right_type: first_u64(
+            row,
+            &[
+                &["music", "commercial_right_type"],
+                &["music", "commercialRightType"],
+            ],
+        )
+        .or_else(|| {
+            parsed_extra.as_ref().and_then(|extra| {
+                first_u64(
+                    extra,
+                    &[&["commercial_right_type"], &["commercialRightType"]],
+                )
+            })
+        }),
         has_strong_beat_url: first_non_empty_string(
             row,
             &[
@@ -2249,6 +2267,7 @@ mod tests {
             representative_music_can_read: None,
             representative_music_can_reuse: None,
             representative_music_is_original_sound: None,
+            representative_music_commercial_right_type: None,
             representative_music_has_strong_beat_url: None,
             representative_music_vid: None,
             representative_engagement_metric_count: 0,
@@ -2408,6 +2427,7 @@ mod tests {
         assert_eq!(judged.representative_music_can_read, None);
         assert_eq!(judged.representative_music_can_reuse, None);
         assert_eq!(judged.representative_music_is_original_sound, None);
+        assert_eq!(judged.representative_music_commercial_right_type, None);
         assert_eq!(judged.representative_music_has_strong_beat_url, None);
         assert_eq!(judged.representative_music_vid, None);
         assert_eq!(judged.representative_engagement_metric_count, 4);
@@ -2461,6 +2481,7 @@ mod tests {
                         },
                         "music": {
                             "is_original_sound": false,
+                            "commercial_right_type": 2,
                             "strong_beat_url": {
                                 "url_list": ["https://cdn.example.com/beat-track"]
                             },
@@ -2539,6 +2560,7 @@ mod tests {
         assert_eq!(judged.representative_music_can_read, Some(true));
         assert_eq!(judged.representative_music_can_reuse, Some(true));
         assert_eq!(judged.representative_music_is_original_sound, Some(false));
+        assert_eq!(judged.representative_music_commercial_right_type, Some(2));
         assert_eq!(judged.representative_music_has_strong_beat_url, Some(true));
         assert_eq!(
             judged.representative_music_vid,

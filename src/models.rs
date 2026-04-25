@@ -197,6 +197,7 @@ pub struct SoundJudgementFilters {
     pub min_representative_music_duration_seconds: Option<f64>,
     pub max_representative_music_duration_seconds: Option<f64>,
     pub representative_music_is_original_sound: Option<bool>,
+    pub representative_music_commercial_right_type: Option<u64>,
     pub require_representative_music_can_read: bool,
     pub require_representative_music_can_reuse: bool,
     pub require_representative_music_has_strong_beat_url: bool,
@@ -245,6 +246,8 @@ pub struct SoundJudgementSummary {
     pub representative_music_can_read_counts: Vec<RepresentativeMusicCanReadCount>,
     pub representative_music_can_reuse_counts: Vec<RepresentativeMusicCanReuseCount>,
     pub representative_music_is_original_sound_counts: Vec<RepresentativeMusicIsOriginalSoundCount>,
+    pub representative_music_commercial_right_type_counts:
+        Vec<RepresentativeMusicCommercialRightTypeCount>,
     pub representative_music_has_strong_beat_url_counts:
         Vec<RepresentativeMusicHasStrongBeatUrlCount>,
     pub representative_music_vid_coverage_counts: Vec<RepresentativeMusicVidCoverageCount>,
@@ -478,6 +481,12 @@ pub struct RepresentativeMusicIsOriginalSoundCount {
 }
 
 #[derive(Debug, Serialize)]
+pub struct RepresentativeMusicCommercialRightTypeCount {
+    pub commercial_right_type: Option<u64>,
+    pub count: usize,
+}
+
+#[derive(Debug, Serialize)]
 pub struct RepresentativeMusicHasStrongBeatUrlCount {
     pub has_strong_beat_url: Option<bool>,
     pub count: usize,
@@ -568,6 +577,7 @@ pub struct JudgedSound {
     pub representative_music_can_read: Option<bool>,
     pub representative_music_can_reuse: Option<bool>,
     pub representative_music_is_original_sound: Option<bool>,
+    pub representative_music_commercial_right_type: Option<u64>,
     pub representative_music_has_strong_beat_url: Option<bool>,
     pub representative_music_vid: Option<String>,
     pub representative_engagement_metric_count: usize,
