@@ -260,6 +260,16 @@ struct RepresentativeEngagementMetrics {
     share_count: Option<u64>,
 }
 
+#[derive(Debug, Clone, Default)]
+struct RepresentativeMusicSignals {
+    duration_seconds: Option<f64>,
+    can_read: Option<bool>,
+    can_reuse: Option<bool>,
+    is_original_sound: Option<bool>,
+    has_strong_beat_url: Option<bool>,
+    music_vid: Option<String>,
+}
+
 #[derive(Debug, Deserialize, Serialize, Default)]
 struct Manifest {
     #[serde(default)]
@@ -521,6 +531,8 @@ fn judge_manifest_entry(manifest_path: &Path, entry: &ManifestEntry) -> Result<J
     let metadata = read_optional_metadata(manifest_path, &entry.local_metadata_path)?;
     let representative_post_engagement =
         representative_engagement_from_posts_artifact(manifest_path, entry)?;
+    let representative_music_signals =
+        representative_music_signals_from_posts_artifact(manifest_path, entry)?;
     let downloaded_video_count = entry
         .downloaded_video_count
         .or_else(|| metadata_usize(&metadata, &[&["downloaded_video_count"]]))
@@ -769,6 +781,27 @@ fn judge_manifest_entry(manifest_path: &Path, entry: &ManifestEntry) -> Result<J
         &mut risks,
     );
 
+    if representative_music_signals.can_reuse == Some(true) {
+        score += 5;
+        reasons.push("Representative music metadata marks the sound reusable".to_string());
+    } else if representative_music_signals.can_reuse == Some(false) {
+        risks.push("Representative music metadata does not mark the sound reusable".to_string());
+    }
+
+    if representative_music_signals.can_read == Some(false) {
+        risks.push("Representative music metadata does not mark the sound readable".to_string());
+    }
+
+    if representative_music_signals.has_strong_beat_url == Some(true) {
+        score += 3;
+        reasons.push("Representative music metadata includes a strong beat track".to_string());
+    }
+
+    if representative_music_signals.music_vid.is_some() {
+        score += 2;
+        reasons.push("Representative music metadata includes a stable music_vid".to_string());
+    }
+
     if entry.resolver_actor_id.is_some() {
         score += 5;
         reasons.push("Resolver actor id is recorded for repeatability".to_string());
@@ -834,6 +867,13 @@ fn judge_manifest_entry(manifest_path: &Path, entry: &ManifestEntry) -> Result<J
         representative_comment_rate_per_1000_views,
         representative_share_count,
         representative_share_rate_per_1000_views,
+        representative_music_duration_seconds: representative_music_signals.duration_seconds,
+        representative_music_can_read: representative_music_signals.can_read,
+        representative_music_can_reuse: representative_music_signals.can_reuse,
+        representative_music_is_original_sound: representative_music_signals.is_original_sound,
+        representative_music_has_strong_beat_url: representative_music_signals
+            .has_strong_beat_url,
+        representative_music_vid: representative_music_signals.music_vid,
         representative_engagement_metric_count,
         representative_engagement_metric_fields,
         missing_representative_engagement_metric_fields,
@@ -1692,6 +1732,46 @@ fn representative_engagement_from_posts_artifact(
     Ok(RepresentativeEngagementMetrics::default())
 }
 
+fn representative_music_signals_from_posts_artifact(
+    manifest_path: &Path,
+    entry: &ManifestEntry,
+) -> Result<RepresentativeMusicSignals> {
+    let Some(posts_path) = entry
+        .local_posts_path
+        .as_deref()
+        .filter(|path| !path.trim().is_empty())
+    else {
+        return Ok(RepresentativeMusicSignals::default());
+    };
+    let Some(video_id) = representative_video_id(entry) else {
+        return Ok(RepresentativeMusicSignals::default());
+    };
+
+    let path = resolve_library_path(manifest_path, posts_path);
+    if !path.exists() {
+        return Ok(RepresentativeMusicSignals::default());
+    }
+
+    let bytes = fs::read(&path).with_context(|| format!("failed to read {}", path.display()))?;
+    let value: Value = serde_json::from_slice(&bytes)
+        .with_context(|| format!("failed to parse {}", path.display()))?;
+    let Some(raw_dataset) = resolver_raw_dataset(&value) else {
+        return Ok(RepresentativeMusicSignals::default());
+    };
+
+    for (index, row) in raw_dataset.iter().enumerate() {
+        if let Some(candidate) = normalize_resolver_post_item(row, index) {
+            let is_representative = candidate.video_id == video_id
+                || candidate.aweme_id.as_deref() == Some(video_id.as_str());
+            if is_representative {
+                return Ok(representative_music_signals_from_row(row));
+            }
+        }
+    }
+
+    Ok(RepresentativeMusicSignals::default())
+}
+
 fn representative_video_id(entry: &ManifestEntry) -> Option<String> {
     entry
         .representative_video_id
@@ -1733,8 +1813,52 @@ fn resolve_library_path(manifest_path: &Path, value: &str) -> PathBuf {
         .unwrap_or(path)
 }
 
+fn representative_music_signals_from_row(row: &Value) -> RepresentativeMusicSignals {
+    let parsed_extra = row
+        .get("music")
+        .and_then(|music| music.get("extra"))
+        .and_then(Value::as_str)
+        .and_then(|text| serde_json::from_str::<Value>(text).ok());
+
+    RepresentativeMusicSignals {
+        duration_seconds: parsed_extra
+            .as_ref()
+            .and_then(|extra| first_f64(extra, &[&["aed_music_dur"]])),
+        can_read: parsed_extra
+            .as_ref()
+            .and_then(|extra| first_bool(extra, &[&["can_read"]])),
+        can_reuse: parsed_extra
+            .as_ref()
+            .and_then(|extra| first_bool(extra, &[&["can_reuse"]])),
+        is_original_sound: first_bool(
+            row,
+            &[&["music", "is_original_sound"], &["music", "is_original"]],
+        ),
+        has_strong_beat_url: first_non_empty_string(
+            row,
+            &[
+                &["music", "strong_beat_url", "url_list", "*"],
+                &["music", "strong_beat_url", "uri"],
+                &["music", "strongBeatUrl", "urlList", "*"],
+            ],
+        )
+        .map(|_| true),
+        music_vid: parsed_extra
+            .as_ref()
+            .and_then(|extra| first_non_empty_string(extra, &[&["music_vid"]])),
+    }
+}
+
 fn metadata_u64(metadata: &Option<Value>, paths: &[&[&str]]) -> Option<u64> {
     metadata.as_ref().and_then(|value| first_u64(value, paths))
+}
+
+fn first_f64(value: &Value, paths: &[&[&str]]) -> Option<f64> {
+    paths.iter().find_map(|path| float_at_path(value, path))
+}
+
+fn first_bool(value: &Value, paths: &[&[&str]]) -> Option<bool> {
+    paths.iter().find_map(|path| bool_at_path(value, path))
 }
 
 fn metadata_usize(metadata: &Option<Value>, paths: &[&[&str]]) -> Option<usize> {
@@ -2012,6 +2136,30 @@ fn unsigned_at_path(value: &Value, path: &[&str]) -> Option<u64> {
         })
 }
 
+fn float_at_path(value: &Value, path: &[&str]) -> Option<f64> {
+    values_at_path(value, path)
+        .into_iter()
+        .find_map(|candidate| match candidate {
+            Value::Number(number) => number.as_f64(),
+            Value::String(text) => text.trim().parse().ok(),
+            _ => None,
+        })
+}
+
+fn bool_at_path(value: &Value, path: &[&str]) -> Option<bool> {
+    values_at_path(value, path)
+        .into_iter()
+        .find_map(|candidate| match candidate {
+            Value::Bool(boolean) => Some(*boolean),
+            Value::String(text) => match text.trim().to_ascii_lowercase().as_str() {
+                "true" => Some(true),
+                "false" => Some(false),
+                _ => None,
+            },
+            _ => None,
+        })
+}
+
 fn values_at_path<'a>(value: &'a Value, path: &[&str]) -> Vec<&'a Value> {
     if path.is_empty() {
         return vec![value];
@@ -2098,6 +2246,12 @@ mod tests {
             representative_comment_rate_per_1000_views: None,
             representative_share_count: None,
             representative_share_rate_per_1000_views: None,
+            representative_music_duration_seconds: None,
+            representative_music_can_read: None,
+            representative_music_can_reuse: None,
+            representative_music_is_original_sound: None,
+            representative_music_has_strong_beat_url: None,
+            representative_music_vid: None,
             representative_engagement_metric_count: 0,
             representative_engagement_metric_fields: Vec::new(),
             missing_representative_engagement_metric_fields: Vec::new(),
@@ -2251,6 +2405,12 @@ mod tests {
         );
         assert_eq!(judged.representative_comment_rate_per_1000_views, Some(1));
         assert_eq!(judged.representative_share_rate_per_1000_views, Some(1));
+        assert_eq!(judged.representative_music_duration_seconds, None);
+        assert_eq!(judged.representative_music_can_read, None);
+        assert_eq!(judged.representative_music_can_reuse, None);
+        assert_eq!(judged.representative_music_is_original_sound, None);
+        assert_eq!(judged.representative_music_has_strong_beat_url, None);
+        assert_eq!(judged.representative_music_vid, None);
         assert_eq!(judged.representative_engagement_metric_count, 4);
         assert_eq!(
             judged.representative_engagement_metric_fields,
@@ -2299,6 +2459,13 @@ mod tests {
                             "digg_count": 7_427_697,
                             "comment_count": 51_294,
                             "share_count": 1_375_712
+                        },
+                        "music": {
+                            "is_original_sound": false,
+                            "strong_beat_url": {
+                                "url_list": ["https://cdn.example.com/beat-track"]
+                            },
+                            "extra": "{\"aed_music_dur\":212.28,\"can_read\":true,\"can_reuse\":true,\"music_vid\":\"v10ad6g50000cds030jc77u5bevbglsg\"}"
                         }
                     }
                 ]
@@ -2369,6 +2536,15 @@ mod tests {
         assert_eq!(judged.representative_comment_rate_per_1000_views, Some(1));
         assert_eq!(judged.representative_share_count, Some(1_375_712));
         assert_eq!(judged.representative_share_rate_per_1000_views, Some(36));
+        assert_eq!(judged.representative_music_duration_seconds, Some(212.28));
+        assert_eq!(judged.representative_music_can_read, Some(true));
+        assert_eq!(judged.representative_music_can_reuse, Some(true));
+        assert_eq!(judged.representative_music_is_original_sound, Some(false));
+        assert_eq!(judged.representative_music_has_strong_beat_url, Some(true));
+        assert_eq!(
+            judged.representative_music_vid,
+            Some("v10ad6g50000cds030jc77u5bevbglsg".to_string())
+        );
         assert_eq!(judged.representative_engagement_metric_count, 4);
         assert_eq!(judged.score, 100);
 
