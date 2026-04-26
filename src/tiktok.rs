@@ -520,6 +520,7 @@ pub fn judge_sound_library(manifest_path: &Path) -> Result<Vec<JudgedSound>> {
         .collect::<Result<Vec<_>>>()?;
 
     annotate_song_id_country_coverage_counts(&mut sounds);
+    apply_song_id_country_coverage_signal(&mut sounds);
     sort_and_rank_judged_sounds(&mut sounds);
 
     Ok(sounds)
@@ -556,6 +557,33 @@ fn annotate_song_id_country_coverage_counts(sounds: &mut [JudgedSound]) {
             .filter(|song_id| !song_id.is_empty())
             .and_then(|song_id| song_countries.get(song_id).map(BTreeSet::len));
     }
+}
+
+fn apply_song_id_country_coverage_signal(sounds: &mut [JudgedSound]) {
+    for sound in sounds.iter_mut() {
+        if let Some(country_count) = sound.song_id_country_coverage_count {
+            let score_bonus = match country_count {
+                2 => 4,
+                3.. => 8,
+                _ => 0,
+            };
+            let reason = format!("song_id persists across {country_count} recorded trend markets");
+
+            if score_bonus > 0 && !sound.reasons.iter().any(|existing| existing == &reason) {
+                sound.score = sound.score.saturating_add(score_bonus);
+                sound.reasons.push(reason);
+            }
+        }
+
+        refresh_derived_judgement_fields(sound);
+    }
+}
+
+fn refresh_derived_judgement_fields(sound: &mut JudgedSound) {
+    sound.score = sound.score.min(100);
+    sound.reason_count = sound.reasons.len();
+    sound.risk_count = sound.risks.len();
+    sound.recommended_action = recommended_action(sound.score, &sound.risks).to_string();
 }
 
 fn sort_and_rank_judged_sounds(sounds: &mut [JudgedSound]) {
@@ -2500,6 +2528,59 @@ mod tests {
         assert_eq!(coverage.get("sound_ca"), Some(&Some(1)));
         assert_eq!(coverage.get("sound_unknown_country"), Some(&None));
         assert_eq!(coverage.get("sound_missing_song"), Some(&None));
+    }
+
+    #[test]
+    fn apply_song_id_country_coverage_signal_rewards_cross_country_persistence() {
+        let mut global = judged_sound("sound_global", 70, Some(1));
+        global.song_id_country_coverage_count = Some(3);
+
+        let mut cross_market = judged_sound("sound_cross_market", 70, Some(2));
+        cross_market.song_id_country_coverage_count = Some(2);
+
+        let mut local_only = judged_sound("sound_local_only", 70, Some(3));
+        local_only.song_id_country_coverage_count = Some(1);
+
+        let mut missing = judged_sound("sound_missing", 70, Some(4));
+        missing.song_id_country_coverage_count = None;
+
+        let mut sounds = vec![global, cross_market, local_only, missing];
+        apply_song_id_country_coverage_signal(&mut sounds);
+
+        let by_id = sounds
+            .into_iter()
+            .map(|sound| (sound.sound_id.clone(), sound))
+            .collect::<BTreeMap<_, _>>();
+
+        let global = by_id.get("sound_global").expect("global sound");
+        assert_eq!(global.score, 78);
+        assert_eq!(global.reason_count, 1);
+        assert_eq!(
+            global.reasons,
+            vec!["song_id persists across 3 recorded trend markets".to_string()]
+        );
+        assert_eq!(global.recommended_action, "use_first");
+
+        let cross_market = by_id.get("sound_cross_market").expect("cross-market sound");
+        assert_eq!(cross_market.score, 74);
+        assert_eq!(cross_market.reason_count, 1);
+        assert_eq!(
+            cross_market.reasons,
+            vec!["song_id persists across 2 recorded trend markets".to_string()]
+        );
+        assert_eq!(cross_market.recommended_action, "shortlist");
+
+        let local_only = by_id.get("sound_local_only").expect("local-only sound");
+        assert_eq!(local_only.score, 70);
+        assert!(local_only.reasons.is_empty());
+        assert_eq!(local_only.reason_count, 0);
+        assert_eq!(local_only.recommended_action, "shortlist");
+
+        let missing = by_id.get("sound_missing").expect("missing sound");
+        assert_eq!(missing.score, 70);
+        assert!(missing.reasons.is_empty());
+        assert_eq!(missing.reason_count, 0);
+        assert_eq!(missing.recommended_action, "shortlist");
     }
 
     #[test]
