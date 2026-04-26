@@ -170,6 +170,7 @@ pub struct SoundJudgementFilters {
     pub max_song_id_best_trend_rank: Option<u32>,
     pub min_song_id_best_representative_views: Option<u64>,
     pub min_song_id_best_representative_likes: Option<u64>,
+    pub min_song_id_best_representative_like_rate_per_1000_views: Option<u64>,
     pub min_song_id_best_representative_engagements: Option<u64>,
     pub min_song_id_best_representative_comments: Option<u64>,
     pub min_song_id_best_representative_shares: Option<u64>,
@@ -231,6 +232,7 @@ pub struct SoundJudgementSummary {
     pub song_id_best_trend_rank_band_counts: Vec<TrendRankBandCount>,
     pub song_id_best_representative_view_count_band_counts: Vec<RepresentativeViewCountBandCount>,
     pub song_id_best_representative_like_count_band_counts: Vec<RepresentativeLikeCountBandCount>,
+    pub song_id_best_representative_like_rate_band_counts: Vec<RepresentativeLikeRateBandCount>,
     pub song_id_best_representative_engagement_count_band_counts:
         Vec<RepresentativeEngagementCountBandCount>,
     pub song_id_best_representative_comment_count_band_counts:
@@ -618,6 +620,7 @@ pub struct JudgedSound {
     pub song_id_best_trend_rank: Option<u32>,
     pub song_id_best_representative_view_count: Option<u64>,
     pub song_id_best_representative_like_count: Option<u64>,
+    pub song_id_best_representative_like_rate_per_1000_views: Option<u64>,
     pub song_id_best_representative_engagement_count: Option<u64>,
     pub song_id_best_representative_comment_count: Option<u64>,
     pub song_id_best_representative_share_count: Option<u64>,
