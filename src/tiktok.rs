@@ -523,6 +523,7 @@ pub fn judge_sound_library(manifest_path: &Path) -> Result<Vec<JudgedSound>> {
     annotate_song_id_country_coverage_counts(&mut sounds);
     annotate_song_id_top_25_country_counts(&mut sounds);
     annotate_song_id_best_trend_ranks(&mut sounds);
+    annotate_song_id_best_representative_view_counts(&mut sounds);
     apply_song_id_country_coverage_signal(&mut sounds);
     sort_and_rank_judged_sounds(&mut sounds);
 
@@ -624,6 +625,35 @@ fn annotate_song_id_best_trend_ranks(sounds: &mut [JudgedSound]) {
             .map(str::trim)
             .filter(|song_id| !song_id.is_empty())
             .and_then(|song_id| song_best_ranks.get(song_id).copied());
+    }
+}
+
+fn annotate_song_id_best_representative_view_counts(sounds: &mut [JudgedSound]) {
+    let mut song_best_views = BTreeMap::<String, u64>::new();
+
+    for sound in sounds.iter() {
+        if let (Some(song_id), Some(view_count)) = (
+            sound
+                .song_id
+                .as_deref()
+                .map(str::trim)
+                .filter(|song_id| !song_id.is_empty()),
+            sound.representative_view_count,
+        ) {
+            song_best_views
+                .entry(song_id.to_string())
+                .and_modify(|best_view_count| *best_view_count = (*best_view_count).max(view_count))
+                .or_insert(view_count);
+        }
+    }
+
+    for sound in sounds.iter_mut() {
+        sound.song_id_best_representative_view_count = sound
+            .song_id
+            .as_deref()
+            .map(str::trim)
+            .filter(|song_id| !song_id.is_empty())
+            .and_then(|song_id| song_best_views.get(song_id).copied());
     }
 }
 
@@ -1077,6 +1107,7 @@ fn judge_manifest_entry(manifest_path: &Path, entry: &ManifestEntry) -> Result<J
         song_id_country_coverage_count: None,
         song_id_top_25_country_count: None,
         song_id_best_trend_rank: None,
+        song_id_best_representative_view_count: None,
         clip_id: entry.clip_id.clone(),
         country_code: entry.country_code.clone(),
         duration_seconds: entry.duration_seconds,
@@ -2493,6 +2524,7 @@ mod tests {
             song_id_country_coverage_count: None,
             song_id_top_25_country_count: None,
             song_id_best_trend_rank: None,
+            song_id_best_representative_view_count: None,
             clip_id: Some(format!("{id}_clip")),
             country_code: Some("US".to_string()),
             duration_seconds: Some(12),
@@ -2710,6 +2742,48 @@ mod tests {
         assert_eq!(counts.get("sound_us_2"), Some(&Some(2)));
         assert_eq!(counts.get("sound_regional"), Some(&Some(1)));
         assert_eq!(counts.get("sound_unknown_country"), Some(&None));
+    }
+
+    #[test]
+    fn annotate_song_id_best_representative_view_counts_uses_highest_views_per_song() {
+        let mut biggest = judged_sound("sound_biggest", 95, Some(4));
+        biggest.song_id = Some("shared_song".to_string());
+        biggest.representative_view_count = Some(3_500_000);
+
+        let mut smaller = judged_sound("sound_smaller", 90, Some(19));
+        smaller.song_id = Some("shared_song".to_string());
+        smaller.representative_view_count = Some(850_000);
+
+        let mut local = judged_sound("sound_local", 80, Some(33));
+        local.song_id = Some("local_song".to_string());
+        local.representative_view_count = Some(120_000);
+
+        let mut missing_views = judged_sound("sound_missing_views", 75, None);
+        missing_views.song_id = Some("missing_views_song".to_string());
+        missing_views.representative_view_count = None;
+
+        let mut missing_song = judged_sound("sound_missing_song", 70, Some(12));
+        missing_song.song_id = None;
+        missing_song.representative_view_count = Some(9_000_000);
+
+        let mut sounds = vec![biggest, smaller, local, missing_views, missing_song];
+        annotate_song_id_best_representative_view_counts(&mut sounds);
+
+        let best_views = sounds
+            .iter()
+            .map(|sound| {
+                (
+                    sound.sound_id.as_str(),
+                    sound.song_id_best_representative_view_count,
+                )
+            })
+            .collect::<BTreeMap<_, _>>();
+
+        assert_eq!(best_views.get("sound_biggest"), Some(&Some(3_500_000)));
+        assert_eq!(best_views.get("sound_smaller"), Some(&Some(3_500_000)));
+        assert_eq!(best_views.get("sound_local"), Some(&Some(120_000)));
+        assert_eq!(best_views.get("sound_missing_views"), Some(&None));
+        assert_eq!(best_views.get("sound_missing_song"), Some(&None));
     }
 
     #[test]
