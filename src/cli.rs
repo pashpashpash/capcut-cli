@@ -27,10 +27,10 @@ use crate::{
         RepresentativeMusicReviewedCount, RepresentativeMusicVidCoverageCount,
         RepresentativeShareCountBandCount, RepresentativeShareRateBandCount,
         RepresentativeViewCountBandCount, ResolverActorIdCoverageCount, RightsNoteCount, RiskCount,
-        RiskCountCoverageCount, ScoreBandCount, SongIdCountryCoverageCount, SoundImportReport,
-        SoundJudgementFilters, SoundJudgementReport, SoundJudgementSummary,
-        SourceIdentifierCoverageCount, SourceIdentifierFieldCount, TrendRankBandCount,
-        UpdateReport, UsableAssetPairCoverageCount,
+        RiskCountCoverageCount, ScoreBandCount, SongIdCountryCoverageCount,
+        SongIdTop25CountryCount, SoundImportReport, SoundJudgementFilters, SoundJudgementReport,
+        SoundJudgementSummary, SourceIdentifierCoverageCount, SourceIdentifierFieldCount,
+        TrendRankBandCount, UpdateReport, UsableAssetPairCoverageCount,
     },
     tiktok::{
         self, DEFAULT_IMPORT_OUTPUT_DIR, ImportTrendingSoundsOptions, LIBRARY_MANIFEST_PATH,
@@ -461,6 +461,9 @@ struct JudgeSoundArgs {
     min_song_id_country_coverage: Option<usize>,
 
     #[arg(long)]
+    min_song_id_top_25_country_count: Option<usize>,
+
+    #[arg(long)]
     max_song_id_best_trend_rank: Option<u32>,
 
     #[arg(long = "require-reason")]
@@ -830,6 +833,7 @@ impl JudgeSoundArgs {
             platforms: self.platforms.clone(),
             country_codes: self.country_codes.clone(),
             min_song_id_country_coverage: self.min_song_id_country_coverage,
+            min_song_id_top_25_country_count: self.min_song_id_top_25_country_count,
             max_song_id_best_trend_rank: self.max_song_id_best_trend_rank,
             required_reasons: self.required_reasons.clone(),
             recommended_actions: self.recommended_actions.clone(),
@@ -920,6 +924,10 @@ impl JudgeSoundArgs {
             &mut sounds,
             self.min_song_id_country_coverage,
         );
+        filter_judged_sounds_by_song_id_top_25_country_count(
+            &mut sounds,
+            self.min_song_id_top_25_country_count,
+        );
         filter_judged_sounds_by_song_id_best_trend_rank(
             &mut sounds,
             self.max_song_id_best_trend_rank,
@@ -983,6 +991,7 @@ fn summarize_judged_sounds(sounds: &[JudgedSound]) -> SoundJudgementSummary {
     let mut platform_counts = BTreeMap::new();
     let mut country_code_counts = BTreeMap::new();
     let mut song_countries = BTreeMap::<String, BTreeSet<String>>::new();
+    let mut song_top_25_countries = BTreeMap::<String, BTreeSet<String>>::new();
     let mut song_id_best_trend_rank_band_counts = BTreeMap::new();
     let mut score_band_counts = BTreeMap::new();
     let mut trend_rank_band_counts = BTreeMap::new();
@@ -1062,6 +1071,13 @@ fn summarize_judged_sounds(sounds: &[JudgedSound]) -> SoundJudgementSummary {
                 .entry(song_id.to_string())
                 .or_default()
                 .insert(country_code.to_ascii_uppercase());
+
+            if sound.trend_rank.is_some_and(|trend_rank| trend_rank <= 25) {
+                song_top_25_countries
+                    .entry(song_id.to_string())
+                    .or_default()
+                    .insert(country_code.to_ascii_uppercase());
+            }
         }
         *song_id_best_trend_rank_band_counts
             .entry(trend_rank_band(sound.song_id_best_trend_rank).to_string())
@@ -1266,6 +1282,13 @@ fn summarize_judged_sounds(sounds: &[JudgedSound]) -> SoundJudgementSummary {
             .or_insert(0usize) += 1;
     }
 
+    let mut song_id_top_25_country_count_counts = BTreeMap::new();
+    for country_codes in song_top_25_countries.into_values() {
+        *song_id_top_25_country_count_counts
+            .entry(country_codes.len())
+            .or_insert(0usize) += 1;
+    }
+
     SoundJudgementSummary {
         recommended_action_counts: recommended_action_counts
             .into_iter()
@@ -1290,6 +1313,15 @@ fn summarize_judged_sounds(sounds: &[JudgedSound]) -> SoundJudgementSummary {
             .map(
                 |(country_code_count, song_id_count)| SongIdCountryCoverageCount {
                     country_code_count,
+                    song_id_count,
+                },
+            )
+            .collect(),
+        song_id_top_25_country_count_counts: song_id_top_25_country_count_counts
+            .into_iter()
+            .map(
+                |(top_25_country_count, song_id_count)| SongIdTop25CountryCount {
+                    top_25_country_count,
                     song_id_count,
                 },
             )
@@ -2022,6 +2054,18 @@ fn filter_judged_sounds_by_song_id_country_coverage(
     }
 }
 
+fn filter_judged_sounds_by_song_id_top_25_country_count(
+    sounds: &mut Vec<JudgedSound>,
+    min_song_id_top_25_country_count: Option<usize>,
+) {
+    if let Some(min_song_id_top_25_country_count) = min_song_id_top_25_country_count {
+        sounds.retain(|sound| {
+            sound.song_id_top_25_country_count.unwrap_or_default()
+                >= min_song_id_top_25_country_count
+        });
+    }
+}
+
 fn filter_judged_sounds_by_song_id_best_trend_rank(
     sounds: &mut Vec<JudgedSound>,
     max_song_id_best_trend_rank: Option<u32>,
@@ -2360,6 +2404,7 @@ mod tests {
             source_video_url: Some(format!("https://www.tiktok.com/@creator/video/{id}")),
             song_id: Some(id.to_string()),
             song_id_country_coverage_count: None,
+            song_id_top_25_country_count: None,
             song_id_best_trend_rank: None,
             clip_id: Some(format!("{id}_clip")),
             country_code: Some("US".to_string()),
@@ -2686,6 +2731,24 @@ mod tests {
 
         let mut filtered = vec![global_hit, regional, missing_song];
         filter_judged_sounds_by_song_id_country_coverage(&mut filtered, Some(2));
+
+        assert_eq!(filtered.len(), 1);
+        assert_eq!(filtered[0].sound_id, "sound_a");
+    }
+
+    #[test]
+    fn filter_judged_sounds_applies_song_id_top_25_country_count_filter() {
+        let mut global_hit = judged_sound("sound_a", 95, "shortlist_after_rights_review");
+        global_hit.song_id_top_25_country_count = Some(3);
+
+        let mut regional = judged_sound("sound_b", 95, "shortlist_after_rights_review");
+        regional.song_id_top_25_country_count = Some(1);
+
+        let mut missing_song = judged_sound("sound_c", 95, "shortlist_after_rights_review");
+        missing_song.song_id_top_25_country_count = None;
+
+        let mut filtered = vec![global_hit, regional, missing_song];
+        filter_judged_sounds_by_song_id_top_25_country_count(&mut filtered, Some(2));
 
         assert_eq!(filtered.len(), 1);
         assert_eq!(filtered[0].sound_id, "sound_a");
@@ -3490,6 +3553,7 @@ mod tests {
     fn summarize_judged_sounds_counts_actions_score_bands_reasons_and_risks() {
         let mut rights_risk = judged_sound("sound_a", 95, "shortlist_after_rights_review");
         rights_risk.song_id = Some("shared_song".to_string());
+        rights_risk.song_id_top_25_country_count = Some(2);
         rights_risk.song_id_best_trend_rank = Some(1);
         rights_risk.country_code = Some("US".to_string());
         rights_risk.judgement_rank = Some(1);
@@ -3533,6 +3597,7 @@ mod tests {
             .push("Rights still need manual verification before production use".to_string());
         let mut metrics_risk = judged_sound("sound_b", 82, "shortlist_after_rights_review");
         metrics_risk.song_id = Some("shared_song".to_string());
+        metrics_risk.song_id_top_25_country_count = Some(2);
         metrics_risk.song_id_best_trend_rank = Some(1);
         metrics_risk.country_code = Some("GB".to_string());
         metrics_risk.judgement_rank = Some(11);
@@ -3600,6 +3665,7 @@ mod tests {
         ];
         let mut weak_signal = judged_sound("sound_c", 65, "shortlist");
         weak_signal.song_id = Some("shared_song".to_string());
+        weak_signal.song_id_top_25_country_count = Some(2);
         weak_signal.song_id_best_trend_rank = Some(1);
         weak_signal.country_code = Some("CA".to_string());
         weak_signal.judgement_rank = Some(26);
@@ -3639,6 +3705,7 @@ mod tests {
         ];
         let mut needs_review = judged_sound("sound_d", 40, "needs_review");
         needs_review.song_id = Some("regional_song".to_string());
+        needs_review.song_id_top_25_country_count = None;
         needs_review.song_id_best_trend_rank = Some(51);
         needs_review.country_code = Some("US".to_string());
         needs_review.judgement_rank = Some(51);
@@ -3758,6 +3825,12 @@ mod tests {
                 .song_id_country_coverage_counts
                 .iter()
                 .any(|count| { count.country_code_count == 1 && count.song_id_count == 1 })
+        );
+        assert!(
+            summary
+                .song_id_top_25_country_count_counts
+                .iter()
+                .any(|count| { count.top_25_country_count == 2 && count.song_id_count == 1 })
         );
         assert!(
             summary

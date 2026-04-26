@@ -165,6 +165,7 @@ pub struct SoundJudgementFilters {
     pub platforms: Vec<String>,
     pub country_codes: Vec<String>,
     pub min_song_id_country_coverage: Option<usize>,
+    pub min_song_id_top_25_country_count: Option<usize>,
     pub max_song_id_best_trend_rank: Option<u32>,
     pub required_reasons: Vec<String>,
     pub recommended_actions: Vec<String>,
@@ -218,6 +219,7 @@ pub struct SoundJudgementSummary {
     pub platform_counts: Vec<PlatformCount>,
     pub country_code_counts: Vec<CountryCodeCount>,
     pub song_id_country_coverage_counts: Vec<SongIdCountryCoverageCount>,
+    pub song_id_top_25_country_count_counts: Vec<SongIdTop25CountryCount>,
     pub song_id_best_trend_rank_band_counts: Vec<TrendRankBandCount>,
     pub score_band_counts: Vec<ScoreBandCount>,
     pub trend_rank_band_counts: Vec<TrendRankBandCount>,
@@ -292,6 +294,12 @@ pub struct CountryCodeCount {
 #[derive(Debug, Serialize)]
 pub struct SongIdCountryCoverageCount {
     pub country_code_count: usize,
+    pub song_id_count: usize,
+}
+
+#[derive(Debug, Serialize)]
+pub struct SongIdTop25CountryCount {
+    pub top_25_country_count: usize,
     pub song_id_count: usize,
 }
 
@@ -588,6 +596,7 @@ pub struct JudgedSound {
     pub source_video_url: Option<String>,
     pub song_id: Option<String>,
     pub song_id_country_coverage_count: Option<usize>,
+    pub song_id_top_25_country_count: Option<usize>,
     pub song_id_best_trend_rank: Option<u32>,
     pub clip_id: Option<String>,
     pub country_code: Option<String>,

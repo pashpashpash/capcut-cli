@@ -158,6 +158,9 @@ Implemented refinements:
 - returned sounds now include `song_id_country_coverage_count`, computed from the full judged library before filters, so each shortlisted row can show how many distinct recorded trend markets that `song_id` already spans
 - `--min-song-id-country-coverage <n>` lets shortlists require cross-country persistence directly on each returned sound instead of treating the song-level country coverage summary as read-only context
 - that same cross-country persistence now feeds the judge score directly, adding an explicit virality reason and score bonus when a `song_id` survives across multiple recorded trend markets before any shortlist filters run
+- returned sounds now include `song_id_top_25_country_count`, computed from the full judged library before filters, so each shortlisted row can show in how many recorded markets that `song_id` actually held a top-25 chart position
+- `--min-song-id-top-25-country-count <n>` lets shortlists require strong cross-market charting instead of treating all multi-country appearances as equally meaningful
+- that strong cross-market charting signal now feeds the judge score too, adding an explicit virality reason and score bonus when a `song_id` held top-25 positions in multiple recorded markets
 - returned sounds now include `song_id_best_trend_rank`, computed from the full judged library before filters, so each shortlisted row can show the strongest chart position that `song_id` reached anywhere in the recorded library
 - `--max-song-id-best-trend-rank <n>` lets shortlists require that a song's strongest recorded chart position anywhere in the library still lands inside a chosen rank cutoff
 - that multi-market best-rank signal now feeds the judge score too, adding an explicit virality reason and a modest bonus when a `song_id` spans multiple markets and also charted strongly in at least one of them

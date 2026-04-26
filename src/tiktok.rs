@@ -23,6 +23,7 @@ pub const DEFAULT_SOUND_RESOLVER_REGION: &str = "US";
 const DIRECT_DOWNLOAD_METHOD: &str = "direct_http";
 const SOUND_RESOLVER_INPUT_TYPE: &str = "MUSIC";
 const SOUND_RESOLVER_INPUT_LIMIT: usize = 20;
+const STRONG_TREND_RANK_CUTOFF: u32 = 25;
 
 #[derive(Debug, Clone)]
 pub struct ImportTrendingSoundsOptions {
@@ -520,6 +521,7 @@ pub fn judge_sound_library(manifest_path: &Path) -> Result<Vec<JudgedSound>> {
         .collect::<Result<Vec<_>>>()?;
 
     annotate_song_id_country_coverage_counts(&mut sounds);
+    annotate_song_id_top_25_country_counts(&mut sounds);
     annotate_song_id_best_trend_ranks(&mut sounds);
     apply_song_id_country_coverage_signal(&mut sounds);
     sort_and_rank_judged_sounds(&mut sounds);
@@ -557,6 +559,42 @@ fn annotate_song_id_country_coverage_counts(sounds: &mut [JudgedSound]) {
             .map(str::trim)
             .filter(|song_id| !song_id.is_empty())
             .and_then(|song_id| song_countries.get(song_id).map(BTreeSet::len));
+    }
+}
+
+fn annotate_song_id_top_25_country_counts(sounds: &mut [JudgedSound]) {
+    let mut song_top_25_countries = BTreeMap::<String, BTreeSet<String>>::new();
+
+    for sound in sounds.iter() {
+        if let (Some(song_id), Some(country_code), Some(trend_rank)) = (
+            sound
+                .song_id
+                .as_deref()
+                .map(str::trim)
+                .filter(|song_id| !song_id.is_empty()),
+            sound
+                .country_code
+                .as_deref()
+                .map(str::trim)
+                .filter(|country_code| !country_code.is_empty()),
+            sound.trend_rank,
+        ) {
+            if trend_rank <= STRONG_TREND_RANK_CUTOFF {
+                song_top_25_countries
+                    .entry(song_id.to_string())
+                    .or_default()
+                    .insert(country_code.to_ascii_uppercase());
+            }
+        }
+    }
+
+    for sound in sounds.iter_mut() {
+        sound.song_id_top_25_country_count = sound
+            .song_id
+            .as_deref()
+            .map(str::trim)
+            .filter(|song_id| !song_id.is_empty())
+            .and_then(|song_id| song_top_25_countries.get(song_id).map(BTreeSet::len));
     }
 }
 
@@ -605,6 +643,23 @@ fn apply_song_id_country_coverage_signal(sounds: &mut [JudgedSound]) {
             }
 
             if country_count >= 2 {
+                if let Some(top_25_country_count) = sound.song_id_top_25_country_count {
+                    let score_bonus = match top_25_country_count {
+                        2 => 3,
+                        3.. => 6,
+                        _ => 0,
+                    };
+                    let reason = format!(
+                        "song_id charted inside the top {STRONG_TREND_RANK_CUTOFF} in {top_25_country_count} recorded markets"
+                    );
+
+                    if score_bonus > 0 && !sound.reasons.iter().any(|existing| existing == &reason)
+                    {
+                        sound.score = sound.score.saturating_add(score_bonus);
+                        sound.reasons.push(reason);
+                    }
+                }
+
                 if let Some(best_rank) = sound.song_id_best_trend_rank {
                     let score_bonus = match best_rank {
                         1..=10 => 4,
@@ -1020,6 +1075,7 @@ fn judge_manifest_entry(manifest_path: &Path, entry: &ManifestEntry) -> Result<J
         source_video_url: entry.source_video_url.clone(),
         song_id: entry.song_id.clone(),
         song_id_country_coverage_count: None,
+        song_id_top_25_country_count: None,
         song_id_best_trend_rank: None,
         clip_id: entry.clip_id.clone(),
         country_code: entry.country_code.clone(),
@@ -2435,6 +2491,7 @@ mod tests {
             source_video_url: Some(format!("https://www.tiktok.com/@creator/video/{id}")),
             song_id: Some(id.to_string()),
             song_id_country_coverage_count: None,
+            song_id_top_25_country_count: None,
             song_id_best_trend_rank: None,
             clip_id: Some(format!("{id}_clip")),
             country_code: Some("US".to_string()),
@@ -2614,21 +2671,67 @@ mod tests {
     }
 
     #[test]
+    fn annotate_song_id_top_25_country_counts_tracks_strong_cross_market_charting() {
+        let mut us = judged_sound("sound_us", 95, Some(4));
+        us.song_id = Some("shared_song".to_string());
+        us.country_code = Some("US".to_string());
+
+        let mut gb = judged_sound("sound_gb", 90, Some(18));
+        gb.song_id = Some("shared_song".to_string());
+        gb.country_code = Some("GB".to_string());
+
+        let mut weak_ca = judged_sound("sound_ca", 85, Some(33));
+        weak_ca.song_id = Some("shared_song".to_string());
+        weak_ca.country_code = Some("CA".to_string());
+
+        let mut duplicate_us = judged_sound("sound_us_2", 80, Some(12));
+        duplicate_us.song_id = Some("shared_song".to_string());
+        duplicate_us.country_code = Some("us".to_string());
+
+        let mut regional = judged_sound("sound_regional", 75, Some(7));
+        regional.song_id = Some("regional_song".to_string());
+        regional.country_code = Some("AU".to_string());
+
+        let mut no_country = judged_sound("sound_unknown_country", 70, Some(5));
+        no_country.song_id = Some("unknown_song".to_string());
+        no_country.country_code = None;
+
+        let mut sounds = vec![us, gb, weak_ca, duplicate_us, regional, no_country];
+        annotate_song_id_top_25_country_counts(&mut sounds);
+
+        let counts = sounds
+            .iter()
+            .map(|sound| (sound.sound_id.as_str(), sound.song_id_top_25_country_count))
+            .collect::<BTreeMap<_, _>>();
+
+        assert_eq!(counts.get("sound_us"), Some(&Some(2)));
+        assert_eq!(counts.get("sound_gb"), Some(&Some(2)));
+        assert_eq!(counts.get("sound_ca"), Some(&Some(2)));
+        assert_eq!(counts.get("sound_us_2"), Some(&Some(2)));
+        assert_eq!(counts.get("sound_regional"), Some(&Some(1)));
+        assert_eq!(counts.get("sound_unknown_country"), Some(&None));
+    }
+
+    #[test]
     fn apply_song_id_country_coverage_signal_rewards_cross_country_persistence() {
         let mut global = judged_sound("sound_global", 70, Some(1));
         global.song_id_country_coverage_count = Some(3);
+        global.song_id_top_25_country_count = Some(3);
         global.song_id_best_trend_rank = Some(5);
 
         let mut cross_market = judged_sound("sound_cross_market", 70, Some(2));
         cross_market.song_id_country_coverage_count = Some(2);
+        cross_market.song_id_top_25_country_count = Some(2);
         cross_market.song_id_best_trend_rank = Some(18);
 
         let mut local_only = judged_sound("sound_local_only", 70, Some(3));
         local_only.song_id_country_coverage_count = Some(1);
+        local_only.song_id_top_25_country_count = Some(1);
         local_only.song_id_best_trend_rank = Some(8);
 
         let mut missing = judged_sound("sound_missing", 70, Some(4));
         missing.song_id_country_coverage_count = None;
+        missing.song_id_top_25_country_count = None;
         missing.song_id_best_trend_rank = None;
 
         let mut sounds = vec![global, cross_market, local_only, missing];
@@ -2640,24 +2743,26 @@ mod tests {
             .collect::<BTreeMap<_, _>>();
 
         let global = by_id.get("sound_global").expect("global sound");
-        assert_eq!(global.score, 82);
-        assert_eq!(global.reason_count, 2);
+        assert_eq!(global.score, 88);
+        assert_eq!(global.reason_count, 3);
         assert_eq!(
             global.reasons,
             vec![
                 "song_id persists across 3 recorded trend markets".to_string(),
+                "song_id charted inside the top 25 in 3 recorded markets".to_string(),
                 "song_id reached trend rank 5 in at least one recorded market".to_string(),
             ]
         );
         assert_eq!(global.recommended_action, "use_first");
 
         let cross_market = by_id.get("sound_cross_market").expect("cross-market sound");
-        assert_eq!(cross_market.score, 76);
-        assert_eq!(cross_market.reason_count, 2);
+        assert_eq!(cross_market.score, 79);
+        assert_eq!(cross_market.reason_count, 3);
         assert_eq!(
             cross_market.reasons,
             vec![
                 "song_id persists across 2 recorded trend markets".to_string(),
+                "song_id charted inside the top 25 in 2 recorded markets".to_string(),
                 "song_id reached trend rank 18 in at least one recorded market".to_string(),
             ]
         );
