@@ -525,6 +525,7 @@ pub fn judge_sound_library(manifest_path: &Path) -> Result<Vec<JudgedSound>> {
     annotate_song_id_best_trend_ranks(&mut sounds);
     annotate_song_id_best_representative_view_counts(&mut sounds);
     annotate_song_id_best_representative_engagement_counts(&mut sounds);
+    annotate_song_id_best_representative_comment_counts(&mut sounds);
     annotate_song_id_best_representative_share_counts(&mut sounds);
     annotate_song_id_best_representative_engagement_rates(&mut sounds);
     annotate_song_id_best_representative_share_rates(&mut sounds);
@@ -689,6 +690,37 @@ fn annotate_song_id_best_representative_engagement_counts(sounds: &mut [JudgedSo
             .map(str::trim)
             .filter(|song_id| !song_id.is_empty())
             .and_then(|song_id| song_best_engagements.get(song_id).copied());
+    }
+}
+
+fn annotate_song_id_best_representative_comment_counts(sounds: &mut [JudgedSound]) {
+    let mut song_best_comments = BTreeMap::<String, u64>::new();
+
+    for sound in sounds.iter() {
+        if let (Some(song_id), Some(comment_count)) = (
+            sound
+                .song_id
+                .as_deref()
+                .map(str::trim)
+                .filter(|song_id| !song_id.is_empty()),
+            sound.representative_comment_count,
+        ) {
+            song_best_comments
+                .entry(song_id.to_string())
+                .and_modify(|best_comment_count| {
+                    *best_comment_count = (*best_comment_count).max(comment_count)
+                })
+                .or_insert(comment_count);
+        }
+    }
+
+    for sound in sounds.iter_mut() {
+        sound.song_id_best_representative_comment_count = sound
+            .song_id
+            .as_deref()
+            .map(str::trim)
+            .filter(|song_id| !song_id.is_empty())
+            .and_then(|song_id| song_best_comments.get(song_id).copied());
     }
 }
 
@@ -1239,6 +1271,7 @@ fn judge_manifest_entry(manifest_path: &Path, entry: &ManifestEntry) -> Result<J
         song_id_best_trend_rank: None,
         song_id_best_representative_view_count: None,
         song_id_best_representative_engagement_count: None,
+        song_id_best_representative_comment_count: None,
         song_id_best_representative_share_count: None,
         song_id_best_representative_engagement_rate_per_1000_views: None,
         song_id_best_representative_share_rate_per_1000_views: None,
@@ -2660,6 +2693,7 @@ mod tests {
             song_id_best_trend_rank: None,
             song_id_best_representative_view_count: None,
             song_id_best_representative_engagement_count: None,
+            song_id_best_representative_comment_count: None,
             song_id_best_representative_share_count: None,
             song_id_best_representative_engagement_rate_per_1000_views: None,
             song_id_best_representative_share_rate_per_1000_views: None,
@@ -2967,6 +3001,51 @@ mod tests {
             Some(&None)
         );
         assert_eq!(best_engagements.get("sound_missing_song"), Some(&None));
+    }
+
+    #[test]
+    fn annotate_song_id_best_representative_comment_counts_uses_highest_comments_per_song() {
+        let mut biggest = judged_sound("sound_biggest", 95, Some(4));
+        biggest.song_id = Some("shared_song".to_string());
+        biggest.representative_comment_count = Some(125_000);
+
+        let mut smaller = judged_sound("sound_smaller", 83, Some(12));
+        smaller.song_id = Some("shared_song".to_string());
+        smaller.representative_comment_count = Some(5_000);
+
+        let mut local = judged_sound("sound_local", 77, Some(24));
+        local.song_id = Some("local_song".to_string());
+        local.representative_comment_count = Some(8_000);
+
+        let mut missing_comment_count = judged_sound("sound_missing_comment_count", 68, Some(30));
+        missing_comment_count.song_id = Some("missing_comment_song".to_string());
+        missing_comment_count.representative_comment_count = None;
+
+        let mut missing_song = judged_sound("sound_missing_song", 70, Some(12));
+        missing_song.song_id = None;
+        missing_song.representative_comment_count = Some(250_000);
+
+        let mut sounds = vec![biggest, smaller, local, missing_comment_count, missing_song];
+        annotate_song_id_best_representative_comment_counts(&mut sounds);
+
+        let best_comments = sounds
+            .iter()
+            .map(|sound| {
+                (
+                    sound.sound_id.as_str(),
+                    sound.song_id_best_representative_comment_count,
+                )
+            })
+            .collect::<BTreeMap<_, _>>();
+
+        assert_eq!(best_comments.get("sound_biggest"), Some(&Some(125_000)));
+        assert_eq!(best_comments.get("sound_smaller"), Some(&Some(125_000)));
+        assert_eq!(best_comments.get("sound_local"), Some(&Some(8_000)));
+        assert_eq!(
+            best_comments.get("sound_missing_comment_count"),
+            Some(&None)
+        );
+        assert_eq!(best_comments.get("sound_missing_song"), Some(&None));
     }
 
     #[test]
