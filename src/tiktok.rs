@@ -526,6 +526,7 @@ pub fn judge_sound_library(manifest_path: &Path) -> Result<Vec<JudgedSound>> {
     annotate_song_id_best_representative_view_counts(&mut sounds);
     annotate_song_id_best_representative_engagement_counts(&mut sounds);
     annotate_song_id_best_representative_engagement_rates(&mut sounds);
+    annotate_song_id_best_representative_share_rates(&mut sounds);
     apply_song_id_country_coverage_signal(&mut sounds);
     sort_and_rank_judged_sounds(&mut sounds);
 
@@ -719,6 +720,38 @@ fn annotate_song_id_best_representative_engagement_rates(sounds: &mut [JudgedSou
             .map(str::trim)
             .filter(|song_id| !song_id.is_empty())
             .and_then(|song_id| song_best_engagement_rates.get(song_id).copied());
+    }
+}
+
+fn annotate_song_id_best_representative_share_rates(sounds: &mut [JudgedSound]) {
+    let mut song_best_share_rates = BTreeMap::<String, u64>::new();
+
+    for sound in sounds.iter() {
+        if let (Some(song_id), Some(share_rate_per_1000_views)) = (
+            sound
+                .song_id
+                .as_deref()
+                .map(str::trim)
+                .filter(|song_id| !song_id.is_empty()),
+            sound.representative_share_rate_per_1000_views,
+        ) {
+            song_best_share_rates
+                .entry(song_id.to_string())
+                .and_modify(|best_share_rate_per_1000_views| {
+                    *best_share_rate_per_1000_views =
+                        (*best_share_rate_per_1000_views).max(share_rate_per_1000_views)
+                })
+                .or_insert(share_rate_per_1000_views);
+        }
+    }
+
+    for sound in sounds.iter_mut() {
+        sound.song_id_best_representative_share_rate_per_1000_views = sound
+            .song_id
+            .as_deref()
+            .map(str::trim)
+            .filter(|song_id| !song_id.is_empty())
+            .and_then(|song_id| song_best_share_rates.get(song_id).copied());
     }
 }
 
@@ -1175,6 +1208,7 @@ fn judge_manifest_entry(manifest_path: &Path, entry: &ManifestEntry) -> Result<J
         song_id_best_representative_view_count: None,
         song_id_best_representative_engagement_count: None,
         song_id_best_representative_engagement_rate_per_1000_views: None,
+        song_id_best_representative_share_rate_per_1000_views: None,
         clip_id: entry.clip_id.clone(),
         country_code: entry.country_code.clone(),
         duration_seconds: entry.duration_seconds,
@@ -2594,6 +2628,7 @@ mod tests {
             song_id_best_representative_view_count: None,
             song_id_best_representative_engagement_count: None,
             song_id_best_representative_engagement_rate_per_1000_views: None,
+            song_id_best_representative_share_rate_per_1000_views: None,
             clip_id: Some(format!("{id}_clip")),
             country_code: Some("US".to_string()),
             duration_seconds: Some(12),
@@ -2938,6 +2973,48 @@ mod tests {
         assert_eq!(best_rates.get("sound_biggest"), Some(&Some(235)));
         assert_eq!(best_rates.get("sound_smaller"), Some(&Some(235)));
         assert_eq!(best_rates.get("sound_local"), Some(&Some(65)));
+        assert_eq!(best_rates.get("sound_missing_density"), Some(&None));
+        assert_eq!(best_rates.get("sound_missing_song"), Some(&None));
+    }
+
+    #[test]
+    fn annotate_song_id_best_representative_share_rates_uses_highest_spread_density_per_song() {
+        let mut biggest = judged_sound("sound_biggest", 95, Some(4));
+        biggest.song_id = Some("shared_song".to_string());
+        biggest.representative_share_rate_per_1000_views = Some(36);
+
+        let mut smaller = judged_sound("sound_smaller", 83, Some(12));
+        smaller.song_id = Some("shared_song".to_string());
+        smaller.representative_share_rate_per_1000_views = Some(12);
+
+        let mut local = judged_sound("sound_local", 77, Some(24));
+        local.song_id = Some("local_song".to_string());
+        local.representative_share_rate_per_1000_views = Some(8);
+
+        let mut missing_density = judged_sound("sound_missing_density", 68, Some(30));
+        missing_density.song_id = Some("missing_density_song".to_string());
+        missing_density.representative_share_rate_per_1000_views = None;
+
+        let mut missing_song = judged_sound("sound_missing_song", 70, Some(12));
+        missing_song.song_id = None;
+        missing_song.representative_share_rate_per_1000_views = Some(25);
+
+        let mut sounds = vec![biggest, smaller, local, missing_density, missing_song];
+        annotate_song_id_best_representative_share_rates(&mut sounds);
+
+        let best_rates = sounds
+            .iter()
+            .map(|sound| {
+                (
+                    sound.sound_id.as_str(),
+                    sound.song_id_best_representative_share_rate_per_1000_views,
+                )
+            })
+            .collect::<BTreeMap<_, _>>();
+
+        assert_eq!(best_rates.get("sound_biggest"), Some(&Some(36)));
+        assert_eq!(best_rates.get("sound_smaller"), Some(&Some(36)));
+        assert_eq!(best_rates.get("sound_local"), Some(&Some(8)));
         assert_eq!(best_rates.get("sound_missing_density"), Some(&None));
         assert_eq!(best_rates.get("sound_missing_song"), Some(&None));
     }
