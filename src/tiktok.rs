@@ -524,6 +524,7 @@ pub fn judge_sound_library(manifest_path: &Path) -> Result<Vec<JudgedSound>> {
     annotate_song_id_top_25_country_counts(&mut sounds);
     annotate_song_id_best_trend_ranks(&mut sounds);
     annotate_song_id_best_representative_view_counts(&mut sounds);
+    annotate_song_id_best_representative_engagement_counts(&mut sounds);
     apply_song_id_country_coverage_signal(&mut sounds);
     sort_and_rank_judged_sounds(&mut sounds);
 
@@ -654,6 +655,37 @@ fn annotate_song_id_best_representative_view_counts(sounds: &mut [JudgedSound]) 
             .map(str::trim)
             .filter(|song_id| !song_id.is_empty())
             .and_then(|song_id| song_best_views.get(song_id).copied());
+    }
+}
+
+fn annotate_song_id_best_representative_engagement_counts(sounds: &mut [JudgedSound]) {
+    let mut song_best_engagements = BTreeMap::<String, u64>::new();
+
+    for sound in sounds.iter() {
+        if let (Some(song_id), Some(engagement_count)) = (
+            sound
+                .song_id
+                .as_deref()
+                .map(str::trim)
+                .filter(|song_id| !song_id.is_empty()),
+            sound.representative_engagement_count,
+        ) {
+            song_best_engagements
+                .entry(song_id.to_string())
+                .and_modify(|best_engagement_count| {
+                    *best_engagement_count = (*best_engagement_count).max(engagement_count)
+                })
+                .or_insert(engagement_count);
+        }
+    }
+
+    for sound in sounds.iter_mut() {
+        sound.song_id_best_representative_engagement_count = sound
+            .song_id
+            .as_deref()
+            .map(str::trim)
+            .filter(|song_id| !song_id.is_empty())
+            .and_then(|song_id| song_best_engagements.get(song_id).copied());
     }
 }
 
@@ -1108,6 +1140,7 @@ fn judge_manifest_entry(manifest_path: &Path, entry: &ManifestEntry) -> Result<J
         song_id_top_25_country_count: None,
         song_id_best_trend_rank: None,
         song_id_best_representative_view_count: None,
+        song_id_best_representative_engagement_count: None,
         clip_id: entry.clip_id.clone(),
         country_code: entry.country_code.clone(),
         duration_seconds: entry.duration_seconds,
@@ -2525,6 +2558,7 @@ mod tests {
             song_id_top_25_country_count: None,
             song_id_best_trend_rank: None,
             song_id_best_representative_view_count: None,
+            song_id_best_representative_engagement_count: None,
             clip_id: Some(format!("{id}_clip")),
             country_code: Some("US".to_string()),
             duration_seconds: Some(12),
@@ -2784,6 +2818,51 @@ mod tests {
         assert_eq!(best_views.get("sound_local"), Some(&Some(120_000)));
         assert_eq!(best_views.get("sound_missing_views"), Some(&None));
         assert_eq!(best_views.get("sound_missing_song"), Some(&None));
+    }
+
+    #[test]
+    fn annotate_song_id_best_representative_engagement_counts_uses_highest_engagements_per_song() {
+        let mut biggest = judged_sound("sound_biggest", 95, Some(4));
+        biggest.song_id = Some("shared_song".to_string());
+        biggest.representative_engagement_count = Some(825_000);
+
+        let mut smaller = judged_sound("sound_smaller", 90, Some(19));
+        smaller.song_id = Some("shared_song".to_string());
+        smaller.representative_engagement_count = Some(240_000);
+
+        let mut local = judged_sound("sound_local", 80, Some(33));
+        local.song_id = Some("local_song".to_string());
+        local.representative_engagement_count = Some(125_000);
+
+        let mut missing_engagement = judged_sound("sound_missing_engagement", 75, None);
+        missing_engagement.song_id = Some("missing_engagement_song".to_string());
+        missing_engagement.representative_engagement_count = None;
+
+        let mut missing_song = judged_sound("sound_missing_song", 70, Some(12));
+        missing_song.song_id = None;
+        missing_song.representative_engagement_count = Some(1_250_000);
+
+        let mut sounds = vec![biggest, smaller, local, missing_engagement, missing_song];
+        annotate_song_id_best_representative_engagement_counts(&mut sounds);
+
+        let best_engagements = sounds
+            .iter()
+            .map(|sound| {
+                (
+                    sound.sound_id.as_str(),
+                    sound.song_id_best_representative_engagement_count,
+                )
+            })
+            .collect::<BTreeMap<_, _>>();
+
+        assert_eq!(best_engagements.get("sound_biggest"), Some(&Some(825_000)));
+        assert_eq!(best_engagements.get("sound_smaller"), Some(&Some(825_000)));
+        assert_eq!(best_engagements.get("sound_local"), Some(&Some(125_000)));
+        assert_eq!(
+            best_engagements.get("sound_missing_engagement"),
+            Some(&None)
+        );
+        assert_eq!(best_engagements.get("sound_missing_song"), Some(&None));
     }
 
     #[test]
