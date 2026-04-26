@@ -473,6 +473,9 @@ struct JudgeSoundArgs {
     min_song_id_best_representative_views: Option<u64>,
 
     #[arg(long)]
+    min_song_id_best_representative_likes: Option<u64>,
+
+    #[arg(long)]
     min_song_id_best_representative_engagements: Option<u64>,
 
     #[arg(long)]
@@ -858,6 +861,7 @@ impl JudgeSoundArgs {
             min_song_id_top_25_country_count: self.min_song_id_top_25_country_count,
             max_song_id_best_trend_rank: self.max_song_id_best_trend_rank,
             min_song_id_best_representative_views: self.min_song_id_best_representative_views,
+            min_song_id_best_representative_likes: self.min_song_id_best_representative_likes,
             min_song_id_best_representative_engagements: self
                 .min_song_id_best_representative_engagements,
             min_song_id_best_representative_comments: self.min_song_id_best_representative_comments,
@@ -967,6 +971,10 @@ impl JudgeSoundArgs {
             &mut sounds,
             self.min_song_id_best_representative_views,
         );
+        filter_judged_sounds_by_song_id_best_representative_likes(
+            &mut sounds,
+            self.min_song_id_best_representative_likes,
+        );
         filter_judged_sounds_by_song_id_best_representative_engagements(
             &mut sounds,
             self.min_song_id_best_representative_engagements,
@@ -1050,6 +1058,7 @@ fn summarize_judged_sounds(sounds: &[JudgedSound]) -> SoundJudgementSummary {
     let mut song_top_25_countries = BTreeMap::<String, BTreeSet<String>>::new();
     let mut song_id_best_trend_rank_band_counts = BTreeMap::new();
     let mut song_id_best_representative_view_count_band_counts = BTreeMap::new();
+    let mut song_id_best_representative_like_count_band_counts = BTreeMap::new();
     let mut song_id_best_representative_engagement_count_band_counts = BTreeMap::new();
     let mut song_id_best_representative_comment_count_band_counts = BTreeMap::new();
     let mut song_id_best_representative_share_count_band_counts = BTreeMap::new();
@@ -1147,6 +1156,11 @@ fn summarize_judged_sounds(sounds: &[JudgedSound]) -> SoundJudgementSummary {
         *song_id_best_representative_view_count_band_counts
             .entry(representative_view_count_band(
                 sound.song_id_best_representative_view_count,
+            ))
+            .or_insert(0) += 1;
+        *song_id_best_representative_like_count_band_counts
+            .entry(representative_like_count_band(
+                sound.song_id_best_representative_like_count,
             ))
             .or_insert(0) += 1;
         *song_id_best_representative_engagement_count_band_counts
@@ -1426,6 +1440,14 @@ fn summarize_judged_sounds(sounds: &[JudgedSound]) -> SoundJudgementSummary {
             song_id_best_representative_view_count_band_counts
                 .into_iter()
                 .map(|(band, count)| RepresentativeViewCountBandCount {
+                    band: band.to_string(),
+                    count,
+                })
+                .collect(),
+        song_id_best_representative_like_count_band_counts:
+            song_id_best_representative_like_count_band_counts
+                .into_iter()
+                .map(|(band, count)| RepresentativeLikeCountBandCount {
                     band: band.to_string(),
                     count,
                 })
@@ -2233,6 +2255,20 @@ fn filter_judged_sounds_by_song_id_best_representative_views(
     }
 }
 
+fn filter_judged_sounds_by_song_id_best_representative_likes(
+    sounds: &mut Vec<JudgedSound>,
+    min_song_id_best_representative_likes: Option<u64>,
+) {
+    if let Some(min_song_id_best_representative_likes) = min_song_id_best_representative_likes {
+        sounds.retain(|sound| {
+            sound
+                .song_id_best_representative_like_count
+                .unwrap_or_default()
+                >= min_song_id_best_representative_likes
+        });
+    }
+}
+
 fn filter_judged_sounds_by_song_id_best_representative_engagements(
     sounds: &mut Vec<JudgedSound>,
     min_song_id_best_representative_engagements: Option<u64>,
@@ -2656,6 +2692,7 @@ mod tests {
             song_id_top_25_country_count: None,
             song_id_best_trend_rank: None,
             song_id_best_representative_view_count: None,
+            song_id_best_representative_like_count: None,
             song_id_best_representative_engagement_count: None,
             song_id_best_representative_comment_count: None,
             song_id_best_representative_share_count: None,
@@ -3040,6 +3077,24 @@ mod tests {
 
         let mut filtered = vec![breakout, niche, missing_views];
         filter_judged_sounds_by_song_id_best_representative_views(&mut filtered, Some(1_000_000));
+
+        assert_eq!(filtered.len(), 1);
+        assert_eq!(filtered[0].sound_id, "sound_a");
+    }
+
+    #[test]
+    fn filter_judged_sounds_applies_song_id_best_representative_likes_filter() {
+        let mut breakout = judged_sound("sound_a", 95, "shortlist_after_rights_review");
+        breakout.song_id_best_representative_like_count = Some(7_427_697);
+
+        let mut niche = judged_sound("sound_b", 95, "shortlist_after_rights_review");
+        niche.song_id_best_representative_like_count = Some(175_000);
+
+        let mut missing = judged_sound("sound_c", 95, "shortlist_after_rights_review");
+        missing.song_id_best_representative_like_count = None;
+
+        let mut filtered = vec![breakout, niche, missing];
+        filter_judged_sounds_by_song_id_best_representative_likes(&mut filtered, Some(1_000_000));
 
         assert_eq!(filtered.len(), 1);
         assert_eq!(filtered[0].sound_id, "sound_a");
@@ -3983,6 +4038,7 @@ mod tests {
         rights_risk.song_id_top_25_country_count = Some(2);
         rights_risk.song_id_best_trend_rank = Some(1);
         rights_risk.song_id_best_representative_view_count = Some(37_548_076);
+        rights_risk.song_id_best_representative_like_count = Some(7_427_697);
         rights_risk.song_id_best_representative_engagement_count = Some(8_854_703);
         rights_risk.song_id_best_representative_comment_count = Some(125_000);
         rights_risk.song_id_best_representative_share_count = Some(1_375_712);
@@ -4033,6 +4089,7 @@ mod tests {
         metrics_risk.song_id_top_25_country_count = Some(2);
         metrics_risk.song_id_best_trend_rank = Some(1);
         metrics_risk.song_id_best_representative_view_count = Some(37_548_076);
+        metrics_risk.song_id_best_representative_like_count = Some(7_427_697);
         metrics_risk.song_id_best_representative_engagement_count = Some(8_854_703);
         metrics_risk.song_id_best_representative_comment_count = Some(125_000);
         metrics_risk.song_id_best_representative_share_count = Some(1_375_712);
@@ -4107,6 +4164,7 @@ mod tests {
         weak_signal.song_id_top_25_country_count = Some(2);
         weak_signal.song_id_best_trend_rank = Some(1);
         weak_signal.song_id_best_representative_view_count = Some(37_548_076);
+        weak_signal.song_id_best_representative_like_count = Some(7_427_697);
         weak_signal.song_id_best_representative_engagement_count = Some(8_854_703);
         weak_signal.song_id_best_representative_comment_count = Some(125_000);
         weak_signal.song_id_best_representative_share_count = Some(1_375_712);
@@ -4153,6 +4211,7 @@ mod tests {
         needs_review.song_id_top_25_country_count = None;
         needs_review.song_id_best_trend_rank = Some(51);
         needs_review.song_id_best_representative_view_count = Some(650_000);
+        needs_review.song_id_best_representative_like_count = Some(175_000);
         needs_review.song_id_best_representative_engagement_count = Some(250_000);
         needs_review.song_id_best_representative_comment_count = None;
         needs_review.song_id_best_representative_share_count = Some(50_000);
@@ -4316,6 +4375,24 @@ mod tests {
         assert!(
             summary
                 .song_id_best_representative_view_count_band_counts
+                .iter()
+                .any(|count| { count.band == "missing" && count.count == 1 })
+        );
+        assert!(
+            summary
+                .song_id_best_representative_like_count_band_counts
+                .iter()
+                .any(|count| { count.band == "1000000_9999999" && count.count == 3 })
+        );
+        assert!(
+            summary
+                .song_id_best_representative_like_count_band_counts
+                .iter()
+                .any(|count| { count.band == "100000_999999" && count.count == 1 })
+        );
+        assert!(
+            summary
+                .song_id_best_representative_like_count_band_counts
                 .iter()
                 .any(|count| { count.band == "missing" && count.count == 1 })
         );
