@@ -13,22 +13,24 @@ use crate::{
         DurationSecondsBandCount, EngagementMetricCoverageCount, ExtractedAudioCoverageCount,
         JudgedSound, JudgementRankBandCount, LibraryReport, LocalArtifactPathCoverageCount,
         LocalArtifactPathFieldCount, MediaReport, MissingEngagementMetricFieldCount,
-        MissingLocalArtifactPathFieldCount, MissingSourceIdentifierFieldCount, PipelineStep,
-        PipelineStepKind, PlatformCount, ProvenanceCoverageCount, ReasonCount,
-        ReasonCountCoverageCount, RecommendedActionCount, RepresentativeCommentCountBandCount,
-        RepresentativeCommentRateBandCount, RepresentativeEngagementCountBandCount,
-        RepresentativeEngagementMetricFieldCount, RepresentativeEngagementRateBandCount,
-        RepresentativeLikeCountBandCount, RepresentativeLikeRateBandCount,
-        RepresentativeMusicCanReadCount, RepresentativeMusicCanReuseCount,
-        RepresentativeMusicCommercialRightTypeCount, RepresentativeMusicDurationBandCount,
-        RepresentativeMusicHasStrongBeatUrlCount, RepresentativeMusicIsBatchTakeDownMusicCount,
-        RepresentativeMusicIsOriginalSoundCount, RepresentativeMusicReviewedCount,
-        RepresentativeMusicVidCoverageCount, RepresentativeShareCountBandCount,
-        RepresentativeShareRateBandCount, RepresentativeViewCountBandCount,
-        ResolverActorIdCoverageCount, RightsNoteCount, RiskCount, RiskCountCoverageCount,
-        ScoreBandCount, SongIdCountryCoverageCount, SoundImportReport, SoundJudgementFilters,
-        SoundJudgementReport, SoundJudgementSummary, SourceIdentifierCoverageCount,
-        SourceIdentifierFieldCount, TrendRankBandCount, UpdateReport, UsableAssetPairCoverageCount,
+        MissingLocalArtifactPathFieldCount, MissingRepresentativeMusicFieldCount,
+        MissingSourceIdentifierFieldCount, PipelineStep, PipelineStepKind, PlatformCount,
+        ProvenanceCoverageCount, ReasonCount, ReasonCountCoverageCount, RecommendedActionCount,
+        RepresentativeCommentCountBandCount, RepresentativeCommentRateBandCount,
+        RepresentativeEngagementCountBandCount, RepresentativeEngagementMetricFieldCount,
+        RepresentativeEngagementRateBandCount, RepresentativeLikeCountBandCount,
+        RepresentativeLikeRateBandCount, RepresentativeMusicCanReadCount,
+        RepresentativeMusicCanReuseCount, RepresentativeMusicCommercialRightTypeCount,
+        RepresentativeMusicDurationBandCount, RepresentativeMusicFieldCount,
+        RepresentativeMusicFieldCoverageCount, RepresentativeMusicHasStrongBeatUrlCount,
+        RepresentativeMusicIsBatchTakeDownMusicCount, RepresentativeMusicIsOriginalSoundCount,
+        RepresentativeMusicReviewedCount, RepresentativeMusicVidCoverageCount,
+        RepresentativeShareCountBandCount, RepresentativeShareRateBandCount,
+        RepresentativeViewCountBandCount, ResolverActorIdCoverageCount, RightsNoteCount, RiskCount,
+        RiskCountCoverageCount, ScoreBandCount, SongIdCountryCoverageCount, SoundImportReport,
+        SoundJudgementFilters, SoundJudgementReport, SoundJudgementSummary,
+        SourceIdentifierCoverageCount, SourceIdentifierFieldCount, TrendRankBandCount,
+        UpdateReport, UsableAssetPairCoverageCount,
     },
     tiktok::{
         self, DEFAULT_IMPORT_OUTPUT_DIR, ImportTrendingSoundsOptions, LIBRARY_MANIFEST_PATH,
@@ -43,6 +45,17 @@ const REPRESENTATIVE_ENGAGEMENT_METRIC_FIELDS: [&str; 4] = [
     "representative_like_count",
     "representative_comment_count",
     "representative_share_count",
+];
+const REPRESENTATIVE_MUSIC_FIELDS: [&str; 9] = [
+    "representative_music_duration_seconds",
+    "representative_music_can_read",
+    "representative_music_can_reuse",
+    "representative_music_is_original_sound",
+    "representative_music_commercial_right_type",
+    "representative_music_is_batch_take_down_music",
+    "representative_music_reviewed",
+    "representative_music_has_strong_beat_url",
+    "representative_music_vid",
 ];
 const SOURCE_IDENTIFIER_FIELDS: [&str; 6] = [
     "source_url",
@@ -552,6 +565,12 @@ struct JudgeSoundArgs {
     #[arg(long)]
     representative_music_reviewed: Option<bool>,
 
+    #[arg(long)]
+    min_representative_music_fields: Option<usize>,
+
+    #[arg(long = "require-representative-music-field")]
+    required_representative_music_fields: Vec<String>,
+
     #[arg(long, default_value_t = false)]
     require_representative_music_can_read: bool,
 
@@ -729,6 +748,33 @@ impl JudgeSoundArgs {
             )
         }
         if self
+            .min_representative_music_fields
+            .is_some_and(|count| count > REPRESENTATIVE_MUSIC_FIELDS.len())
+        {
+            bail!(
+                "--min-representative-music-fields must be between 0 and {}",
+                REPRESENTATIVE_MUSIC_FIELDS.len()
+            )
+        }
+        if self
+            .required_representative_music_fields
+            .iter()
+            .any(|field| field.trim().is_empty())
+        {
+            bail!("--require-representative-music-field values must not be empty")
+        }
+        if let Some(field) = self
+            .required_representative_music_fields
+            .iter()
+            .map(|field| field.trim())
+            .find(|field| !is_representative_music_field(field))
+        {
+            bail!(
+                "--require-representative-music-field `{field}` must be one of: {}",
+                REPRESENTATIVE_MUSIC_FIELDS.join(", ")
+            )
+        }
+        if self
             .platforms
             .iter()
             .any(|platform| platform.trim().is_empty())
@@ -818,6 +864,8 @@ impl JudgeSoundArgs {
             representative_music_is_batch_take_down_music: self
                 .representative_music_is_batch_take_down_music,
             representative_music_reviewed: self.representative_music_reviewed,
+            min_representative_music_fields: self.min_representative_music_fields,
+            required_representative_music_fields: self.required_representative_music_fields.clone(),
             require_representative_music_can_read: self.require_representative_music_can_read,
             require_representative_music_can_reuse: self.require_representative_music_can_reuse,
             require_representative_music_has_strong_beat_url: self
@@ -884,6 +932,8 @@ impl JudgeSoundArgs {
             self.representative_music_commercial_right_type,
             self.representative_music_is_batch_take_down_music,
             self.representative_music_reviewed,
+            self.min_representative_music_fields,
+            &self.required_representative_music_fields,
             self.require_representative_music_can_read,
             self.require_representative_music_can_reuse,
             self.require_representative_music_has_strong_beat_url,
@@ -944,6 +994,8 @@ fn summarize_judged_sounds(sounds: &[JudgedSound]) -> SoundJudgementSummary {
     let mut representative_comment_rate_band_counts = BTreeMap::new();
     let mut representative_share_rate_band_counts = BTreeMap::new();
     let mut representative_music_duration_band_counts = BTreeMap::new();
+    let mut representative_music_field_coverage_counts = BTreeMap::new();
+    let mut representative_music_field_counts = BTreeMap::new();
     let mut representative_music_can_read_counts = BTreeMap::new();
     let mut representative_music_can_reuse_counts = BTreeMap::new();
     let mut representative_music_is_original_sound_counts = BTreeMap::new();
@@ -955,6 +1007,7 @@ fn summarize_judged_sounds(sounds: &[JudgedSound]) -> SoundJudgementSummary {
     let mut missing_source_identifier_field_counts = BTreeMap::new();
     let mut missing_local_artifact_path_field_counts = BTreeMap::new();
     let mut missing_engagement_metric_field_counts = BTreeMap::new();
+    let mut missing_representative_music_field_counts = BTreeMap::new();
     let mut reason_counts = BTreeMap::new();
     let mut risk_counts = BTreeMap::new();
 
@@ -1123,6 +1176,14 @@ fn summarize_judged_sounds(sounds: &[JudgedSound]) -> SoundJudgementSummary {
                 sound.representative_music_duration_seconds,
             ))
             .or_insert(0) += 1;
+        *representative_music_field_coverage_counts
+            .entry(sound.representative_music_field_count)
+            .or_insert(0) += 1;
+        for field in &sound.representative_music_fields {
+            *representative_music_field_counts
+                .entry(field.clone())
+                .or_insert(0) += 1;
+        }
         *representative_music_can_read_counts
             .entry(sound.representative_music_can_read)
             .or_insert(0) += 1;
@@ -1159,6 +1220,11 @@ fn summarize_judged_sounds(sounds: &[JudgedSound]) -> SoundJudgementSummary {
         }
         for field in &sound.missing_representative_engagement_metric_fields {
             *missing_engagement_metric_field_counts
+                .entry(field.clone())
+                .or_insert(0) += 1;
+        }
+        for field in &sound.missing_representative_music_fields {
+            *missing_representative_music_field_counts
                 .entry(field.clone())
                 .or_insert(0) += 1;
         }
@@ -1403,6 +1469,19 @@ fn summarize_judged_sounds(sounds: &[JudgedSound]) -> SoundJudgementSummary {
                 count,
             })
             .collect(),
+        representative_music_field_coverage_counts: representative_music_field_coverage_counts
+            .into_iter()
+            .map(|(representative_music_field_count, count)| {
+                RepresentativeMusicFieldCoverageCount {
+                    representative_music_field_count,
+                    count,
+                }
+            })
+            .collect(),
+        representative_music_field_counts: representative_music_field_counts
+            .into_iter()
+            .map(|(field, count)| RepresentativeMusicFieldCount { field, count })
+            .collect(),
         representative_music_can_read_counts: representative_music_can_read_counts
             .into_iter()
             .map(|(can_read, count)| RepresentativeMusicCanReadCount { can_read, count })
@@ -1475,6 +1554,10 @@ fn summarize_judged_sounds(sounds: &[JudgedSound]) -> SoundJudgementSummary {
         missing_engagement_metric_field_counts: missing_engagement_metric_field_counts
             .into_iter()
             .map(|(field, count)| MissingEngagementMetricFieldCount { field, count })
+            .collect(),
+        missing_representative_music_field_counts: missing_representative_music_field_counts
+            .into_iter()
+            .map(|(field, count)| MissingRepresentativeMusicFieldCount { field, count })
             .collect(),
         reason_counts: reason_counts
             .into_iter()
@@ -1989,6 +2072,8 @@ fn filter_judged_sounds_by_representative_music_context(
     representative_music_commercial_right_type: Option<u64>,
     representative_music_is_batch_take_down_music: Option<bool>,
     representative_music_reviewed: Option<bool>,
+    min_representative_music_fields: Option<usize>,
+    required_representative_music_fields: &[String],
     require_representative_music_can_read: bool,
     require_representative_music_can_reuse: bool,
     require_representative_music_has_strong_beat_url: bool,
@@ -2045,6 +2130,26 @@ fn filter_judged_sounds_by_representative_music_context(
         });
     }
 
+    if let Some(min_representative_music_fields) = min_representative_music_fields {
+        sounds.retain(|sound| {
+            sound.representative_music_field_count >= min_representative_music_fields
+        });
+    }
+
+    if !required_representative_music_fields.is_empty() {
+        sounds.retain(|sound| {
+            required_representative_music_fields
+                .iter()
+                .map(|field| field.trim())
+                .all(|required| {
+                    sound
+                        .representative_music_fields
+                        .iter()
+                        .any(|field| field == required)
+                })
+        });
+    }
+
     if require_representative_music_can_read {
         sounds.retain(|sound| sound.representative_music_can_read == Some(true));
     }
@@ -2096,6 +2201,10 @@ fn text_matches_any_excluded_term(text: &str, excluded_terms: &[String]) -> bool
 
 fn is_representative_engagement_metric_field(field: &str) -> bool {
     REPRESENTATIVE_ENGAGEMENT_METRIC_FIELDS.contains(&field)
+}
+
+fn is_representative_music_field(field: &str) -> bool {
+    REPRESENTATIVE_MUSIC_FIELDS.contains(&field)
 }
 
 fn is_source_identifier_field(field: &str) -> bool {
@@ -2252,6 +2361,12 @@ mod tests {
             representative_music_reviewed: None,
             representative_music_has_strong_beat_url: None,
             representative_music_vid: None,
+            representative_music_field_count: 0,
+            representative_music_fields: Vec::new(),
+            missing_representative_music_fields: REPRESENTATIVE_MUSIC_FIELDS
+                .iter()
+                .map(|field| (*field).to_string())
+                .collect(),
             representative_engagement_metric_count: 0,
             representative_engagement_metric_fields: Vec::new(),
             missing_representative_engagement_metric_fields: Vec::new(),
@@ -2262,6 +2377,61 @@ mod tests {
             risks: Vec::new(),
             recommended_action: recommended_action.to_string(),
         }
+    }
+
+    fn refresh_representative_music_fields(sound: &mut JudgedSound) {
+        let mut representative_music_fields = Vec::new();
+
+        if sound.representative_music_duration_seconds.is_some() {
+            representative_music_fields.push("representative_music_duration_seconds".to_string());
+        }
+        if sound.representative_music_can_read.is_some() {
+            representative_music_fields.push("representative_music_can_read".to_string());
+        }
+        if sound.representative_music_can_reuse.is_some() {
+            representative_music_fields.push("representative_music_can_reuse".to_string());
+        }
+        if sound.representative_music_is_original_sound.is_some() {
+            representative_music_fields.push("representative_music_is_original_sound".to_string());
+        }
+        if sound.representative_music_commercial_right_type.is_some() {
+            representative_music_fields
+                .push("representative_music_commercial_right_type".to_string());
+        }
+        if sound
+            .representative_music_is_batch_take_down_music
+            .is_some()
+        {
+            representative_music_fields
+                .push("representative_music_is_batch_take_down_music".to_string());
+        }
+        if sound.representative_music_reviewed.is_some() {
+            representative_music_fields.push("representative_music_reviewed".to_string());
+        }
+        if sound.representative_music_has_strong_beat_url.is_some() {
+            representative_music_fields
+                .push("representative_music_has_strong_beat_url".to_string());
+        }
+        if sound
+            .representative_music_vid
+            .as_deref()
+            .is_some_and(|music_vid| !music_vid.trim().is_empty())
+        {
+            representative_music_fields.push("representative_music_vid".to_string());
+        }
+
+        sound.representative_music_field_count = representative_music_fields.len();
+        sound.representative_music_fields = representative_music_fields;
+        sound.missing_representative_music_fields = REPRESENTATIVE_MUSIC_FIELDS
+            .iter()
+            .filter(|required| {
+                !sound
+                    .representative_music_fields
+                    .iter()
+                    .any(|field| field == *required)
+            })
+            .map(|field| (*field).to_string())
+            .collect();
     }
 
     #[test]
@@ -2827,6 +2997,7 @@ mod tests {
         reusable.representative_music_can_reuse = Some(true);
         reusable.representative_music_has_strong_beat_url = Some(true);
         reusable.representative_music_vid = Some("music_vid_1".to_string());
+        refresh_representative_music_fields(&mut reusable);
 
         let mut too_short = judged_sound("sound_b", 95, "shortlist_after_rights_review");
         too_short.representative_music_duration_seconds = Some(8.5);
@@ -2838,6 +3009,7 @@ mod tests {
         too_short.representative_music_can_reuse = Some(true);
         too_short.representative_music_has_strong_beat_url = Some(true);
         too_short.representative_music_vid = Some("music_vid_2".to_string());
+        refresh_representative_music_fields(&mut too_short);
 
         let mut not_reusable = judged_sound("sound_c", 95, "shortlist_after_rights_review");
         not_reusable.representative_music_duration_seconds = Some(180.0);
@@ -2849,6 +3021,7 @@ mod tests {
         not_reusable.representative_music_can_reuse = Some(false);
         not_reusable.representative_music_has_strong_beat_url = Some(true);
         not_reusable.representative_music_vid = Some("music_vid_3".to_string());
+        refresh_representative_music_fields(&mut not_reusable);
 
         let mut blank_vid = judged_sound("sound_d", 95, "shortlist_after_rights_review");
         blank_vid.representative_music_duration_seconds = Some(180.0);
@@ -2860,6 +3033,7 @@ mod tests {
         blank_vid.representative_music_can_reuse = Some(true);
         blank_vid.representative_music_has_strong_beat_url = Some(true);
         blank_vid.representative_music_vid = Some("   ".to_string());
+        refresh_representative_music_fields(&mut blank_vid);
 
         let mut unreviewed = judged_sound("sound_e", 95, "shortlist_after_rights_review");
         unreviewed.representative_music_duration_seconds = Some(180.0);
@@ -2871,6 +3045,7 @@ mod tests {
         unreviewed.representative_music_can_reuse = Some(true);
         unreviewed.representative_music_has_strong_beat_url = Some(true);
         unreviewed.representative_music_vid = Some("music_vid_4".to_string());
+        refresh_representative_music_fields(&mut unreviewed);
 
         let mut original_sound = judged_sound("sound_f", 95, "shortlist_after_rights_review");
         original_sound.representative_music_duration_seconds = Some(180.0);
@@ -2882,6 +3057,7 @@ mod tests {
         original_sound.representative_music_can_reuse = Some(true);
         original_sound.representative_music_has_strong_beat_url = Some(true);
         original_sound.representative_music_vid = Some("music_vid_5".to_string());
+        refresh_representative_music_fields(&mut original_sound);
 
         let mut filtered = vec![
             reusable,
@@ -2899,6 +3075,8 @@ mod tests {
             Some(2),
             Some(false),
             Some(true),
+            Some(8),
+            &["representative_music_reviewed".to_string()],
             true,
             true,
             true,
@@ -3249,6 +3427,7 @@ mod tests {
         rights_risk.representative_music_reviewed = Some(true);
         rights_risk.representative_music_has_strong_beat_url = Some(true);
         rights_risk.representative_music_vid = Some("music_vid_shared".to_string());
+        refresh_representative_music_fields(&mut rights_risk);
         rights_risk.representative_engagement_metric_count = 4;
         rights_risk.representative_engagement_metric_fields = vec![
             "representative_view_count".to_string(),
@@ -3289,6 +3468,7 @@ mod tests {
         metrics_risk.representative_music_is_batch_take_down_music = Some(false);
         metrics_risk.representative_music_reviewed = Some(false);
         metrics_risk.representative_music_has_strong_beat_url = Some(false);
+        refresh_representative_music_fields(&mut metrics_risk);
         metrics_risk.representative_engagement_metric_count = 2;
         metrics_risk.representative_engagement_metric_fields = vec![
             "representative_view_count".to_string(),
@@ -3351,6 +3531,7 @@ mod tests {
         weak_signal.representative_music_is_batch_take_down_music = Some(false);
         weak_signal.representative_music_reviewed = Some(true);
         weak_signal.representative_music_has_strong_beat_url = Some(false);
+        refresh_representative_music_fields(&mut weak_signal);
         weak_signal.missing_representative_engagement_metric_fields = missing_fields.clone();
         weak_signal.local_artifact_path_count = 4;
         weak_signal.local_artifact_path_fields = vec![
@@ -3377,6 +3558,7 @@ mod tests {
         needs_review.representative_music_is_original_sound = Some(true);
         needs_review.representative_music_commercial_right_type = Some(1);
         needs_review.representative_music_vid = Some("music_vid_regional".to_string());
+        refresh_representative_music_fields(&mut needs_review);
         needs_review.missing_representative_engagement_metric_fields = missing_fields.clone();
         needs_review.local_artifact_path_count = 2;
         needs_review.local_artifact_path_fields = vec![
@@ -3685,6 +3867,26 @@ mod tests {
         );
         assert!(
             summary
+                .representative_music_field_coverage_counts
+                .iter()
+                .any(|count| { count.representative_music_field_count == 9 && count.count == 1 })
+        );
+        assert!(
+            summary
+                .representative_music_field_coverage_counts
+                .iter()
+                .any(|count| { count.representative_music_field_count == 0 && count.count == 1 })
+        );
+        assert!(
+            summary
+                .representative_music_field_counts
+                .iter()
+                .any(|count| {
+                    count.field == "representative_music_reviewed" && count.count == 3
+                })
+        );
+        assert!(
+            summary
                 .representative_music_can_read_counts
                 .iter()
                 .any(|count| { count.can_read == Some(true) && count.count == 2 })
@@ -3826,6 +4028,14 @@ mod tests {
                 .representative_music_vid_coverage_counts
                 .iter()
                 .any(|count| { !count.music_vid_present && count.count == 3 })
+        );
+        assert!(
+            summary
+                .missing_representative_music_field_counts
+                .iter()
+                .any(|count| {
+                    count.field == "representative_music_reviewed" && count.count == 2
+                })
         );
         assert!(summary.rights_note_counts.iter().any(|count| {
             count.rights_note == "No production license is recorded" && count.count == 1

@@ -200,6 +200,8 @@ pub struct SoundJudgementFilters {
     pub representative_music_commercial_right_type: Option<u64>,
     pub representative_music_is_batch_take_down_music: Option<bool>,
     pub representative_music_reviewed: Option<bool>,
+    pub min_representative_music_fields: Option<usize>,
+    pub required_representative_music_fields: Vec<String>,
     pub require_representative_music_can_read: bool,
     pub require_representative_music_can_reuse: bool,
     pub require_representative_music_has_strong_beat_url: bool,
@@ -245,6 +247,8 @@ pub struct SoundJudgementSummary {
     pub representative_comment_rate_band_counts: Vec<RepresentativeCommentRateBandCount>,
     pub representative_share_rate_band_counts: Vec<RepresentativeShareRateBandCount>,
     pub representative_music_duration_band_counts: Vec<RepresentativeMusicDurationBandCount>,
+    pub representative_music_field_coverage_counts: Vec<RepresentativeMusicFieldCoverageCount>,
+    pub representative_music_field_counts: Vec<RepresentativeMusicFieldCount>,
     pub representative_music_can_read_counts: Vec<RepresentativeMusicCanReadCount>,
     pub representative_music_can_reuse_counts: Vec<RepresentativeMusicCanReuseCount>,
     pub representative_music_is_original_sound_counts: Vec<RepresentativeMusicIsOriginalSoundCount>,
@@ -259,6 +263,7 @@ pub struct SoundJudgementSummary {
     pub missing_source_identifier_field_counts: Vec<MissingSourceIdentifierFieldCount>,
     pub missing_local_artifact_path_field_counts: Vec<MissingLocalArtifactPathFieldCount>,
     pub missing_engagement_metric_field_counts: Vec<MissingEngagementMetricFieldCount>,
+    pub missing_representative_music_field_counts: Vec<MissingRepresentativeMusicFieldCount>,
     pub reason_counts: Vec<ReasonCount>,
     pub risk_counts: Vec<RiskCount>,
 }
@@ -468,6 +473,18 @@ pub struct RepresentativeMusicDurationBandCount {
 }
 
 #[derive(Debug, Serialize)]
+pub struct RepresentativeMusicFieldCoverageCount {
+    pub representative_music_field_count: usize,
+    pub count: usize,
+}
+
+#[derive(Debug, Serialize)]
+pub struct RepresentativeMusicFieldCount {
+    pub field: String,
+    pub count: usize,
+}
+
+#[derive(Debug, Serialize)]
 pub struct RepresentativeMusicCanReadCount {
     pub can_read: Option<bool>,
     pub count: usize,
@@ -512,6 +529,12 @@ pub struct RepresentativeMusicHasStrongBeatUrlCount {
 #[derive(Debug, Serialize)]
 pub struct RepresentativeMusicVidCoverageCount {
     pub music_vid_present: bool,
+    pub count: usize,
+}
+
+#[derive(Debug, Serialize)]
+pub struct MissingRepresentativeMusicFieldCount {
+    pub field: String,
     pub count: usize,
 }
 
@@ -599,6 +622,9 @@ pub struct JudgedSound {
     pub representative_music_reviewed: Option<bool>,
     pub representative_music_has_strong_beat_url: Option<bool>,
     pub representative_music_vid: Option<String>,
+    pub representative_music_field_count: usize,
+    pub representative_music_fields: Vec<String>,
+    pub missing_representative_music_fields: Vec<String>,
     pub representative_engagement_metric_count: usize,
     pub representative_engagement_metric_fields: Vec<String>,
     pub missing_representative_engagement_metric_fields: Vec<String>,

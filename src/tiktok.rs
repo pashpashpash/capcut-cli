@@ -273,6 +273,18 @@ struct RepresentativeMusicSignals {
     music_vid: Option<String>,
 }
 
+const REPRESENTATIVE_MUSIC_FIELDS: [&str; 9] = [
+    "representative_music_duration_seconds",
+    "representative_music_can_read",
+    "representative_music_can_reuse",
+    "representative_music_is_original_sound",
+    "representative_music_commercial_right_type",
+    "representative_music_is_batch_take_down_music",
+    "representative_music_reviewed",
+    "representative_music_has_strong_beat_url",
+    "representative_music_vid",
+];
+
 #[derive(Debug, Deserialize, Serialize, Default)]
 struct Manifest {
     #[serde(default)]
@@ -655,6 +667,55 @@ fn judge_manifest_entry(manifest_path: &Path, entry: &ManifestEntry) -> Result<J
         .filter_map(|(field, is_present)| (!is_present).then(|| (*field).to_string()))
         .collect::<Vec<_>>();
     let representative_engagement_metric_count = representative_engagement_metric_fields.len();
+    let representative_music_fields = [
+        (
+            "representative_music_duration_seconds",
+            representative_music_signals.duration_seconds.is_some(),
+        ),
+        (
+            "representative_music_can_read",
+            representative_music_signals.can_read.is_some(),
+        ),
+        (
+            "representative_music_can_reuse",
+            representative_music_signals.can_reuse.is_some(),
+        ),
+        (
+            "representative_music_is_original_sound",
+            representative_music_signals.is_original_sound.is_some(),
+        ),
+        (
+            "representative_music_commercial_right_type",
+            representative_music_signals.commercial_right_type.is_some(),
+        ),
+        (
+            "representative_music_is_batch_take_down_music",
+            representative_music_signals
+                .is_batch_take_down_music
+                .is_some(),
+        ),
+        (
+            "representative_music_reviewed",
+            representative_music_signals.reviewed.is_some(),
+        ),
+        (
+            "representative_music_has_strong_beat_url",
+            representative_music_signals.has_strong_beat_url.is_some(),
+        ),
+        (
+            "representative_music_vid",
+            representative_music_signals.music_vid.is_some(),
+        ),
+    ];
+    let representative_music_present_fields = representative_music_fields
+        .iter()
+        .filter_map(|(field, is_present)| is_present.then(|| (*field).to_string()))
+        .collect::<Vec<_>>();
+    let missing_representative_music_fields = representative_music_fields
+        .iter()
+        .filter_map(|(field, is_present)| (!is_present).then(|| (*field).to_string()))
+        .collect::<Vec<_>>();
+    let representative_music_field_count = representative_music_present_fields.len();
     let source_identifiers = [
         ("source_url", !entry.source_url.trim().is_empty()),
         (
@@ -887,6 +948,9 @@ fn judge_manifest_entry(manifest_path: &Path, entry: &ManifestEntry) -> Result<J
         representative_music_reviewed: representative_music_signals.reviewed,
         representative_music_has_strong_beat_url: representative_music_signals.has_strong_beat_url,
         representative_music_vid: representative_music_signals.music_vid,
+        representative_music_field_count,
+        representative_music_fields: representative_music_present_fields,
+        missing_representative_music_fields,
         representative_engagement_metric_count,
         representative_engagement_metric_fields,
         missing_representative_engagement_metric_fields,
@@ -2310,6 +2374,12 @@ mod tests {
             representative_music_reviewed: None,
             representative_music_has_strong_beat_url: None,
             representative_music_vid: None,
+            representative_music_field_count: 0,
+            representative_music_fields: Vec::new(),
+            missing_representative_music_fields: REPRESENTATIVE_MUSIC_FIELDS
+                .iter()
+                .map(|field| (*field).to_string())
+                .collect(),
             representative_engagement_metric_count: 0,
             representative_engagement_metric_fields: Vec::new(),
             missing_representative_engagement_metric_fields: Vec::new(),
@@ -2472,6 +2542,15 @@ mod tests {
         assert_eq!(judged.representative_music_reviewed, None);
         assert_eq!(judged.representative_music_has_strong_beat_url, None);
         assert_eq!(judged.representative_music_vid, None);
+        assert_eq!(judged.representative_music_field_count, 0);
+        assert!(judged.representative_music_fields.is_empty());
+        assert_eq!(
+            judged.missing_representative_music_fields,
+            REPRESENTATIVE_MUSIC_FIELDS
+                .iter()
+                .map(|field| (*field).to_string())
+                .collect::<Vec<_>>()
+        );
         assert_eq!(judged.representative_engagement_metric_count, 4);
         assert_eq!(
             judged.representative_engagement_metric_fields,
@@ -2613,6 +2692,14 @@ mod tests {
             judged.representative_music_vid,
             Some("v10ad6g50000cds030jc77u5bevbglsg".to_string())
         );
+        assert_eq!(judged.representative_music_field_count, 9);
+        assert!(
+            judged
+                .representative_music_fields
+                .iter()
+                .any(|field| field == "representative_music_reviewed")
+        );
+        assert!(judged.missing_representative_music_fields.is_empty());
         assert_eq!(judged.representative_engagement_metric_count, 4);
         assert!(judged.risks.contains(
             &"Representative music metadata marks the sound as batch-takedown music".to_string()
