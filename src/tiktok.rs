@@ -1,5 +1,5 @@
 use std::{
-    collections::BTreeSet,
+    collections::{BTreeMap, BTreeSet},
     fs,
     path::{Path, PathBuf},
     process::Command,
@@ -519,9 +519,43 @@ pub fn judge_sound_library(manifest_path: &Path) -> Result<Vec<JudgedSound>> {
         .map(|entry| judge_manifest_entry(manifest_path, entry))
         .collect::<Result<Vec<_>>>()?;
 
+    annotate_song_id_country_coverage_counts(&mut sounds);
     sort_and_rank_judged_sounds(&mut sounds);
 
     Ok(sounds)
+}
+
+fn annotate_song_id_country_coverage_counts(sounds: &mut [JudgedSound]) {
+    let mut song_countries = BTreeMap::<String, BTreeSet<String>>::new();
+
+    for sound in sounds.iter() {
+        if let (Some(song_id), Some(country_code)) = (
+            sound
+                .song_id
+                .as_deref()
+                .map(str::trim)
+                .filter(|song_id| !song_id.is_empty()),
+            sound
+                .country_code
+                .as_deref()
+                .map(str::trim)
+                .filter(|country_code| !country_code.is_empty()),
+        ) {
+            song_countries
+                .entry(song_id.to_string())
+                .or_default()
+                .insert(country_code.to_ascii_uppercase());
+        }
+    }
+
+    for sound in sounds.iter_mut() {
+        sound.song_id_country_coverage_count = sound
+            .song_id
+            .as_deref()
+            .map(str::trim)
+            .filter(|song_id| !song_id.is_empty())
+            .and_then(|song_id| song_countries.get(song_id).map(BTreeSet::len));
+    }
 }
 
 fn sort_and_rank_judged_sounds(sounds: &mut [JudgedSound]) {
@@ -908,6 +942,7 @@ fn judge_manifest_entry(manifest_path: &Path, entry: &ManifestEntry) -> Result<J
         source_url: entry.source_url.clone(),
         source_video_url: entry.source_video_url.clone(),
         song_id: entry.song_id.clone(),
+        song_id_country_coverage_count: None,
         clip_id: entry.clip_id.clone(),
         country_code: entry.country_code.clone(),
         duration_seconds: entry.duration_seconds,
@@ -2321,6 +2356,7 @@ mod tests {
             source_url: format!("https://www.tiktok.com/music/{id}"),
             source_video_url: Some(format!("https://www.tiktok.com/@creator/video/{id}")),
             song_id: Some(id.to_string()),
+            song_id_country_coverage_count: None,
             clip_id: Some(format!("{id}_clip")),
             country_code: Some("US".to_string()),
             duration_seconds: Some(12),
@@ -2417,6 +2453,53 @@ mod tests {
                 .collect::<Vec<_>>(),
             vec![Some(1), Some(2), Some(3), Some(4)]
         );
+    }
+
+    #[test]
+    fn annotate_song_id_country_coverage_counts_distinct_countries_per_song() {
+        let mut us = judged_sound("sound_us", 95, Some(1));
+        us.song_id = Some("shared_song".to_string());
+        us.country_code = Some("US".to_string());
+
+        let mut gb = judged_sound("sound_gb", 90, Some(2));
+        gb.song_id = Some("shared_song".to_string());
+        gb.country_code = Some("GB".to_string());
+
+        let mut duplicate_us = judged_sound("sound_us_2", 85, Some(3));
+        duplicate_us.song_id = Some("shared_song".to_string());
+        duplicate_us.country_code = Some("us".to_string());
+
+        let mut regional = judged_sound("sound_ca", 80, Some(4));
+        regional.song_id = Some("regional_song".to_string());
+        regional.country_code = Some("CA".to_string());
+
+        let mut no_country = judged_sound("sound_unknown_country", 75, Some(5));
+        no_country.song_id = Some("unknown_song".to_string());
+        no_country.country_code = None;
+
+        let mut no_song = judged_sound("sound_missing_song", 70, Some(6));
+        no_song.song_id = None;
+        no_song.country_code = Some("US".to_string());
+
+        let mut sounds = vec![us, gb, duplicate_us, regional, no_country, no_song];
+        annotate_song_id_country_coverage_counts(&mut sounds);
+
+        let coverage = sounds
+            .iter()
+            .map(|sound| {
+                (
+                    sound.sound_id.as_str(),
+                    sound.song_id_country_coverage_count,
+                )
+            })
+            .collect::<BTreeMap<_, _>>();
+
+        assert_eq!(coverage.get("sound_us"), Some(&Some(2)));
+        assert_eq!(coverage.get("sound_gb"), Some(&Some(2)));
+        assert_eq!(coverage.get("sound_us_2"), Some(&Some(2)));
+        assert_eq!(coverage.get("sound_ca"), Some(&Some(1)));
+        assert_eq!(coverage.get("sound_unknown_country"), Some(&None));
+        assert_eq!(coverage.get("sound_missing_song"), Some(&None));
     }
 
     #[test]

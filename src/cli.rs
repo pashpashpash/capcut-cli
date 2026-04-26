@@ -457,6 +457,9 @@ struct JudgeSoundArgs {
     #[arg(long = "country-code")]
     country_codes: Vec<String>,
 
+    #[arg(long)]
+    min_song_id_country_coverage: Option<usize>,
+
     #[arg(long = "require-reason")]
     required_reasons: Vec<String>,
 
@@ -820,6 +823,7 @@ impl JudgeSoundArgs {
             max_judgement_rank: self.max_judgement_rank,
             platforms: self.platforms.clone(),
             country_codes: self.country_codes.clone(),
+            min_song_id_country_coverage: self.min_song_id_country_coverage,
             required_reasons: self.required_reasons.clone(),
             recommended_actions: self.recommended_actions.clone(),
             excluded_risks: self.excluded_risks.clone(),
@@ -905,6 +909,10 @@ impl JudgeSoundArgs {
             None,
         );
         filter_judged_sounds_by_country_codes(&mut sounds, &self.country_codes);
+        filter_judged_sounds_by_song_id_country_coverage(
+            &mut sounds,
+            self.min_song_id_country_coverage,
+        );
         filter_judged_sounds_by_source_identifiers(
             &mut sounds,
             self.min_source_identifiers,
@@ -1984,6 +1992,17 @@ fn filter_judged_sounds_by_country_codes(sounds: &mut Vec<JudgedSound>, country_
     });
 }
 
+fn filter_judged_sounds_by_song_id_country_coverage(
+    sounds: &mut Vec<JudgedSound>,
+    min_song_id_country_coverage: Option<usize>,
+) {
+    if let Some(min_song_id_country_coverage) = min_song_id_country_coverage {
+        sounds.retain(|sound| {
+            sound.song_id_country_coverage_count.unwrap_or_default() >= min_song_id_country_coverage
+        });
+    }
+}
+
 fn filter_judged_sounds_by_repeatability_context(
     sounds: &mut Vec<JudgedSound>,
     require_resolver_actor_id: bool,
@@ -2308,6 +2327,7 @@ mod tests {
             source_url: format!("https://www.tiktok.com/music/{id}"),
             source_video_url: Some(format!("https://www.tiktok.com/@creator/video/{id}")),
             song_id: Some(id.to_string()),
+            song_id_country_coverage_count: None,
             clip_id: Some(format!("{id}_clip")),
             country_code: Some("US".to_string()),
             duration_seconds: Some(12),
@@ -2618,6 +2638,24 @@ mod tests {
 
         assert_eq!(filtered.len(), 1);
         assert_eq!(filtered[0].sound_id, "sound_b");
+    }
+
+    #[test]
+    fn filter_judged_sounds_applies_song_id_country_coverage_filter() {
+        let mut global_hit = judged_sound("sound_a", 95, "shortlist_after_rights_review");
+        global_hit.song_id_country_coverage_count = Some(3);
+
+        let mut regional = judged_sound("sound_b", 95, "shortlist_after_rights_review");
+        regional.song_id_country_coverage_count = Some(1);
+
+        let mut missing_song = judged_sound("sound_c", 95, "shortlist_after_rights_review");
+        missing_song.song_id_country_coverage_count = None;
+
+        let mut filtered = vec![global_hit, regional, missing_song];
+        filter_judged_sounds_by_song_id_country_coverage(&mut filtered, Some(2));
+
+        assert_eq!(filtered.len(), 1);
+        assert_eq!(filtered[0].sound_id, "sound_a");
     }
 
     #[test]
