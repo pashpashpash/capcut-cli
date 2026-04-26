@@ -268,6 +268,7 @@ struct RepresentativeMusicSignals {
     is_original_sound: Option<bool>,
     commercial_right_type: Option<u64>,
     is_batch_take_down_music: Option<bool>,
+    reviewed: Option<bool>,
     has_strong_beat_url: Option<bool>,
     music_vid: Option<String>,
 }
@@ -883,6 +884,7 @@ fn judge_manifest_entry(manifest_path: &Path, entry: &ManifestEntry) -> Result<J
             .commercial_right_type,
         representative_music_is_batch_take_down_music: representative_music_signals
             .is_batch_take_down_music,
+        representative_music_reviewed: representative_music_signals.reviewed,
         representative_music_has_strong_beat_url: representative_music_signals.has_strong_beat_url,
         representative_music_vid: representative_music_signals.music_vid,
         representative_engagement_metric_count,
@@ -1875,6 +1877,9 @@ fn representative_music_signals_from_row(row: &Value) -> RepresentativeMusicSign
                 )
             })
         }),
+        reviewed: parsed_extra
+            .as_ref()
+            .and_then(|extra| first_bool(extra, &[&["reviewed"]])),
         has_strong_beat_url: first_non_empty_string(
             row,
             &[
@@ -2194,9 +2199,16 @@ fn bool_at_path(value: &Value, path: &[&str]) -> Option<bool> {
         .into_iter()
         .find_map(|candidate| match candidate {
             Value::Bool(boolean) => Some(*boolean),
+            Value::Number(number) => match number.as_i64() {
+                Some(1) => Some(true),
+                Some(0) => Some(false),
+                _ => None,
+            },
             Value::String(text) => match text.trim().to_ascii_lowercase().as_str() {
                 "true" => Some(true),
                 "false" => Some(false),
+                "1" => Some(true),
+                "0" => Some(false),
                 _ => None,
             },
             _ => None,
@@ -2295,6 +2307,7 @@ mod tests {
             representative_music_is_original_sound: None,
             representative_music_commercial_right_type: None,
             representative_music_is_batch_take_down_music: None,
+            representative_music_reviewed: None,
             representative_music_has_strong_beat_url: None,
             representative_music_vid: None,
             representative_engagement_metric_count: 0,
@@ -2456,6 +2469,7 @@ mod tests {
         assert_eq!(judged.representative_music_is_original_sound, None);
         assert_eq!(judged.representative_music_commercial_right_type, None);
         assert_eq!(judged.representative_music_is_batch_take_down_music, None);
+        assert_eq!(judged.representative_music_reviewed, None);
         assert_eq!(judged.representative_music_has_strong_beat_url, None);
         assert_eq!(judged.representative_music_vid, None);
         assert_eq!(judged.representative_engagement_metric_count, 4);
@@ -2513,7 +2527,7 @@ mod tests {
                             "strong_beat_url": {
                                 "url_list": ["https://cdn.example.com/beat-track"]
                             },
-                            "extra": "{\"aed_music_dur\":212.28,\"can_read\":true,\"can_reuse\":true,\"is_batch_take_down_music\":true,\"music_vid\":\"v10ad6g50000cds030jc77u5bevbglsg\"}"
+                            "extra": "{\"aed_music_dur\":212.28,\"can_read\":true,\"can_reuse\":true,\"is_batch_take_down_music\":true,\"reviewed\":1,\"music_vid\":\"v10ad6g50000cds030jc77u5bevbglsg\"}"
                         }
                     }
                 ]
@@ -2593,6 +2607,7 @@ mod tests {
             judged.representative_music_is_batch_take_down_music,
             Some(true)
         );
+        assert_eq!(judged.representative_music_reviewed, Some(true));
         assert_eq!(judged.representative_music_has_strong_beat_url, Some(true));
         assert_eq!(
             judged.representative_music_vid,
@@ -2638,7 +2653,7 @@ mod tests {
                             "strong_beat_url": {
                                 "url_list": ["https://cdn.example.com/beat-track"]
                             },
-                            "extra": "{\"aed_music_dur\":212.28,\"can_read\":true,\"can_reuse\":true,\"is_batch_take_down_music\":true,\"music_vid\":\"v10ad6g50000cds030jc77u5bevbglsg\"}"
+                            "extra": "{\"aed_music_dur\":212.28,\"can_read\":true,\"can_reuse\":true,\"is_batch_take_down_music\":true,\"reviewed\":1,\"music_vid\":\"v10ad6g50000cds030jc77u5bevbglsg\"}"
                         }
                     }
                 ]
@@ -2863,6 +2878,47 @@ mod tests {
         assert_eq!(
             candidate.public_media_url.as_deref(),
             Some("https://cdn.example.com/bitrate.mp4")
+        );
+    }
+
+    #[test]
+    fn bool_at_path_accepts_numeric_and_string_boolean_forms() {
+        let value = json!({
+            "music": {
+                "extra": {
+                    "reviewed_numeric_true": 1,
+                    "reviewed_numeric_false": 0,
+                    "reviewed_string_true": "1",
+                    "reviewed_string_false": "0",
+                    "reviewed_bool_true": true,
+                    "reviewed_bool_false": false
+                }
+            }
+        });
+
+        assert_eq!(
+            bool_at_path(&value, &["music", "extra", "reviewed_numeric_true"]),
+            Some(true)
+        );
+        assert_eq!(
+            bool_at_path(&value, &["music", "extra", "reviewed_numeric_false"]),
+            Some(false)
+        );
+        assert_eq!(
+            bool_at_path(&value, &["music", "extra", "reviewed_string_true"]),
+            Some(true)
+        );
+        assert_eq!(
+            bool_at_path(&value, &["music", "extra", "reviewed_string_false"]),
+            Some(false)
+        );
+        assert_eq!(
+            bool_at_path(&value, &["music", "extra", "reviewed_bool_true"]),
+            Some(true)
+        );
+        assert_eq!(
+            bool_at_path(&value, &["music", "extra", "reviewed_bool_false"]),
+            Some(false)
         );
     }
 }
