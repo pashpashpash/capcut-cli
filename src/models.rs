@@ -159,6 +159,7 @@ pub struct SoundJudgementReport {
 #[derive(Debug, Serialize)]
 pub struct SoundJudgementFilters {
     pub top: Option<usize>,
+    pub distinct_song_id: bool,
     pub min_score: Option<u32>,
     pub max_trend_rank: Option<u32>,
     pub max_judgement_rank: Option<usize>,

@@ -1,4 +1,4 @@
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::{BTreeMap, BTreeSet, HashSet};
 use std::path::PathBuf;
 
 use anyhow::{Result, bail};
@@ -442,6 +442,9 @@ struct JudgeSoundArgs {
     #[arg(long)]
     top: Option<usize>,
 
+    #[arg(long, default_value_t = false)]
+    distinct_song_id: bool,
+
     #[arg(long)]
     min_score: Option<u32>,
 
@@ -827,6 +830,7 @@ impl JudgeSoundArgs {
         let summary = summarize_judged_sounds(&sounds);
         let filters = SoundJudgementFilters {
             top: self.top,
+            distinct_song_id: self.distinct_song_id,
             min_score: self.min_score,
             max_trend_rank: self.max_trend_rank,
             max_judgement_rank: self.max_judgement_rank,
@@ -966,6 +970,7 @@ impl JudgeSoundArgs {
             self.require_representative_music_has_strong_beat_url,
             self.require_representative_music_vid,
         );
+        dedupe_judged_sounds_by_song_id(&mut sounds, self.distinct_song_id);
         if let Some(top) = self.top {
             sounds.truncate(top);
         }
@@ -2079,6 +2084,24 @@ fn filter_judged_sounds_by_song_id_best_trend_rank(
     }
 }
 
+fn dedupe_judged_sounds_by_song_id(sounds: &mut Vec<JudgedSound>, distinct_song_id: bool) {
+    if !distinct_song_id {
+        return;
+    }
+
+    let mut seen_song_ids = HashSet::new();
+    sounds.retain(|sound| {
+        let Some(song_id) = sound.song_id.as_deref().map(str::trim) else {
+            return true;
+        };
+        if song_id.is_empty() {
+            return true;
+        }
+
+        seen_song_ids.insert(song_id.to_string())
+    });
+}
+
 fn filter_judged_sounds_by_repeatability_context(
     sounds: &mut Vec<JudgedSound>,
     require_resolver_actor_id: bool,
@@ -2770,6 +2793,61 @@ mod tests {
 
         assert_eq!(filtered.len(), 1);
         assert_eq!(filtered[0].sound_id, "sound_a");
+    }
+
+    #[test]
+    fn dedupe_judged_sounds_by_song_id_keeps_first_row_per_song() {
+        let mut first_song = judged_sound("sound_a_us", 95, "shortlist_after_rights_review");
+        first_song.song_id = Some("shared_song".to_string());
+        first_song.country_code = Some("US".to_string());
+
+        let mut duplicate_song = judged_sound("sound_a_gb", 92, "shortlist_after_rights_review");
+        duplicate_song.song_id = Some("shared_song".to_string());
+        duplicate_song.country_code = Some("GB".to_string());
+
+        let mut distinct_song = judged_sound("sound_b", 90, "shortlist_after_rights_review");
+        distinct_song.song_id = Some("solo_song".to_string());
+
+        let mut blank_song = judged_sound("sound_c", 88, "shortlist_after_rights_review");
+        blank_song.song_id = Some("   ".to_string());
+
+        let mut missing_song = judged_sound("sound_d", 86, "shortlist_after_rights_review");
+        missing_song.song_id = None;
+
+        let mut filtered = vec![
+            first_song,
+            duplicate_song,
+            distinct_song,
+            blank_song,
+            missing_song,
+        ];
+        dedupe_judged_sounds_by_song_id(&mut filtered, true);
+
+        assert_eq!(filtered.len(), 4);
+        assert_eq!(filtered[0].sound_id, "sound_a_us");
+        assert_eq!(filtered[1].sound_id, "sound_b");
+        assert_eq!(filtered[2].sound_id, "sound_c");
+        assert_eq!(filtered[3].sound_id, "sound_d");
+    }
+
+    #[test]
+    fn distinct_song_id_runs_before_top_truncation() {
+        let mut first_song = judged_sound("sound_a_us", 95, "shortlist_after_rights_review");
+        first_song.song_id = Some("shared_song".to_string());
+
+        let mut duplicate_song = judged_sound("sound_a_gb", 94, "shortlist_after_rights_review");
+        duplicate_song.song_id = Some("shared_song".to_string());
+
+        let mut distinct_song = judged_sound("sound_b", 93, "shortlist_after_rights_review");
+        distinct_song.song_id = Some("solo_song".to_string());
+
+        let mut filtered = vec![first_song, duplicate_song, distinct_song];
+        dedupe_judged_sounds_by_song_id(&mut filtered, true);
+        filtered.truncate(2);
+
+        assert_eq!(filtered.len(), 2);
+        assert_eq!(filtered[0].sound_id, "sound_a_us");
+        assert_eq!(filtered[1].sound_id, "sound_b");
     }
 
     #[test]
