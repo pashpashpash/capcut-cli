@@ -170,6 +170,7 @@ pub struct SoundJudgementFilters {
     pub max_song_id_best_trend_rank: Option<u32>,
     pub min_song_id_best_representative_views: Option<u64>,
     pub min_song_id_best_representative_engagements: Option<u64>,
+    pub min_song_id_best_representative_engagement_rate_per_1000_views: Option<u64>,
     pub required_reasons: Vec<String>,
     pub recommended_actions: Vec<String>,
     pub excluded_risks: Vec<String>,
@@ -227,6 +228,8 @@ pub struct SoundJudgementSummary {
     pub song_id_best_representative_view_count_band_counts: Vec<RepresentativeViewCountBandCount>,
     pub song_id_best_representative_engagement_count_band_counts:
         Vec<RepresentativeEngagementCountBandCount>,
+    pub song_id_best_representative_engagement_rate_band_counts:
+        Vec<RepresentativeEngagementRateBandCount>,
     pub score_band_counts: Vec<ScoreBandCount>,
     pub trend_rank_band_counts: Vec<TrendRankBandCount>,
     pub judgement_rank_band_counts: Vec<JudgementRankBandCount>,
@@ -606,6 +609,7 @@ pub struct JudgedSound {
     pub song_id_best_trend_rank: Option<u32>,
     pub song_id_best_representative_view_count: Option<u64>,
     pub song_id_best_representative_engagement_count: Option<u64>,
+    pub song_id_best_representative_engagement_rate_per_1000_views: Option<u64>,
     pub clip_id: Option<String>,
     pub country_code: Option<String>,
     pub duration_seconds: Option<u32>,
