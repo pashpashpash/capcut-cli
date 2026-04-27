@@ -964,6 +964,25 @@ fn apply_song_id_country_coverage_signal(sounds: &mut [JudgedSound]) {
                         sound.reasons.push(reason);
                     }
                 }
+
+                if let Some(best_engagement_rate) =
+                    sound.song_id_best_representative_engagement_rate_per_1000_views
+                {
+                    let score_bonus = match best_engagement_rate {
+                        200.. => 4,
+                        100..=199 => 2,
+                        _ => 0,
+                    };
+                    let reason = format!(
+                        "song_id reached engagement density {best_engagement_rate} per 1000 views in at least one recorded market"
+                    );
+
+                    if score_bonus > 0 && !sound.reasons.iter().any(|existing| existing == &reason)
+                    {
+                        sound.score = sound.score.saturating_add(score_bonus);
+                        sound.reasons.push(reason);
+                    }
+                }
             }
         }
 
@@ -3408,16 +3427,19 @@ mod tests {
         global.song_id_country_coverage_count = Some(3);
         global.song_id_top_25_country_count = Some(3);
         global.song_id_best_trend_rank = Some(5);
+        global.song_id_best_representative_engagement_rate_per_1000_views = Some(235);
 
         let mut cross_market = judged_sound("sound_cross_market", 70, Some(2));
         cross_market.song_id_country_coverage_count = Some(2);
         cross_market.song_id_top_25_country_count = Some(2);
         cross_market.song_id_best_trend_rank = Some(18);
+        cross_market.song_id_best_representative_engagement_rate_per_1000_views = Some(120);
 
         let mut local_only = judged_sound("sound_local_only", 70, Some(3));
         local_only.song_id_country_coverage_count = Some(1);
         local_only.song_id_top_25_country_count = Some(1);
         local_only.song_id_best_trend_rank = Some(8);
+        local_only.song_id_best_representative_engagement_rate_per_1000_views = Some(235);
 
         let mut missing = judged_sound("sound_missing", 70, Some(4));
         missing.song_id_country_coverage_count = None;
@@ -3433,27 +3455,29 @@ mod tests {
             .collect::<BTreeMap<_, _>>();
 
         let global = by_id.get("sound_global").expect("global sound");
-        assert_eq!(global.score, 88);
-        assert_eq!(global.reason_count, 3);
+        assert_eq!(global.score, 92);
+        assert_eq!(global.reason_count, 4);
         assert_eq!(
             global.reasons,
             vec![
                 "song_id persists across 3 recorded trend markets".to_string(),
                 "song_id charted inside the top 25 in 3 recorded markets".to_string(),
                 "song_id reached trend rank 5 in at least one recorded market".to_string(),
+                "song_id reached engagement density 235 per 1000 views in at least one recorded market".to_string(),
             ]
         );
         assert_eq!(global.recommended_action, "use_first");
 
         let cross_market = by_id.get("sound_cross_market").expect("cross-market sound");
-        assert_eq!(cross_market.score, 79);
-        assert_eq!(cross_market.reason_count, 3);
+        assert_eq!(cross_market.score, 81);
+        assert_eq!(cross_market.reason_count, 4);
         assert_eq!(
             cross_market.reasons,
             vec![
                 "song_id persists across 2 recorded trend markets".to_string(),
                 "song_id charted inside the top 25 in 2 recorded markets".to_string(),
                 "song_id reached trend rank 18 in at least one recorded market".to_string(),
+                "song_id reached engagement density 120 per 1000 views in at least one recorded market".to_string(),
             ]
         );
         assert_eq!(cross_market.recommended_action, "use_first");
