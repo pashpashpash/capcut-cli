@@ -1317,6 +1317,11 @@ fn judge_manifest_entry(manifest_path: &Path, entry: &ManifestEntry) -> Result<J
         &mut reasons,
         &mut risks,
     );
+    add_engagement_density_signal(
+        representative_engagement_rate_per_1000_views,
+        &mut score,
+        &mut reasons,
+    );
 
     if representative_music_signals.can_reuse == Some(true) {
         score += 5;
@@ -2531,6 +2536,22 @@ fn add_engagement_signal(
     }
 }
 
+fn add_engagement_density_signal(
+    engagement_rate_per_1000_views: Option<u64>,
+    score: &mut u32,
+    reasons: &mut Vec<String>,
+) {
+    if let Some(value) = engagement_rate_per_1000_views {
+        let points = threshold_score(value, &[(200, 6), (100, 4), (50, 2)]);
+        if points > 0 {
+            *score += points;
+            reasons.push(format!(
+                "{value} representative engagements per 1000 views are recorded"
+            ));
+        }
+    }
+}
+
 fn threshold_score(value: u64, thresholds: &[(u64, u32)]) -> u32 {
     thresholds
         .iter()
@@ -3419,6 +3440,34 @@ mod tests {
         assert_eq!(best_rates.get("sound_local"), Some(&Some(8)));
         assert_eq!(best_rates.get("sound_missing_density"), Some(&None));
         assert_eq!(best_rates.get("sound_missing_song"), Some(&None));
+    }
+
+    #[test]
+    fn add_engagement_density_signal_rewards_dense_audiences() {
+        let mut score = 0;
+        let mut reasons = Vec::new();
+
+        add_engagement_density_signal(Some(235), &mut score, &mut reasons);
+        assert_eq!(score, 6);
+        assert_eq!(
+            reasons,
+            vec!["235 representative engagements per 1000 views are recorded".to_string()]
+        );
+
+        let mut score = 0;
+        let mut reasons = Vec::new();
+        add_engagement_density_signal(Some(86), &mut score, &mut reasons);
+        assert_eq!(score, 2);
+        assert_eq!(
+            reasons,
+            vec!["86 representative engagements per 1000 views are recorded".to_string()]
+        );
+
+        let mut score = 0;
+        let mut reasons = Vec::new();
+        add_engagement_density_signal(Some(12), &mut score, &mut reasons);
+        assert_eq!(score, 0);
+        assert!(reasons.is_empty());
     }
 
     #[test]
